@@ -69,7 +69,7 @@ def obtener_factura(id: str, db: Session = Depends(get_db)):
     return factura
 
 @router.delete("/{factura_id}")
-def eliminar_factura(factura_id: int, db: Session = Depends(get_db)):
+def eliminar_factura(factura_id: str, db: Session = Depends(get_db)):
     factura = db.query(Factura).filter(Factura.id == factura_id).first()
     if not factura:
         raise HTTPException(status_code=404, detail="Factura no encontrada")

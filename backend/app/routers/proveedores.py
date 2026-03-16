@@ -38,7 +38,7 @@ def actualizar_proveedor(id: str, datos: ProveedorUpdate, db: Session = Depends(
     return proveedor
 
 @router.delete("/{proveedor_id}")
-def eliminar_proveedor(proveedor_id: int, db: Session = Depends(get_db)):
+def eliminar_proveedor(proveedor_id: str, db: Session = Depends(get_db)):
     proveedor = db.query(Proveedor).filter(Proveedor.id == proveedor_id).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
