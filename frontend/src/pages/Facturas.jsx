@@ -1,13 +1,12 @@
 import { formatFecha } from '../utils/fecha'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getFacturas, crearFactura } from '../api/facturas'
+import { getFacturas, crearFactura, eliminarFactura } from '../api/facturas'
 import { getProveedores } from '../api/proveedores'
 import { registrarPago, getPagosPorFactura } from '../api/pagos'
 import EstadoBadge from '../components/EstadoBadge'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
-import { useCallback } from 'react'
 
 const formFacturaVacio = {
   proveedor_id: '', numero_factura: '', fecha_factura: '', monto_original: ''
@@ -28,6 +27,7 @@ export default function Facturas() {
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
+  const [confirmEliminar, setConfirmEliminar] = useState(null)
   const cerrarToast = useCallback(() => setToast(null), [])
 
   const { data: facturas = [], isLoading } = useQuery({
@@ -57,8 +57,20 @@ export default function Facturas() {
       setMostrarFormFactura(false)
       setFormFactura(formFacturaVacio)
       setError('')
+      setToast({ mensaje: 'Factura creada correctamente.', tipo: 'exito' })
     },
     onError: (e) => setError(e.response?.data?.detail ?? 'Error al crear la factura.')
+  })
+
+  const eliminar = useMutation({
+    mutationFn: eliminarFactura,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['facturas'])
+      queryClient.invalidateQueries(['dashboard'])
+      setConfirmEliminar(null)
+      setToast({ mensaje: 'Factura eliminada.', tipo: 'exito' })
+    },
+    onError: () => setToast({ mensaje: 'Error al eliminar la factura.', tipo: 'error' })
   })
 
   const registrarPagoMutation = useMutation({
@@ -160,10 +172,10 @@ export default function Facturas() {
         )}
       </div>
 
-      {/* Formulario nueva factura */}
+      {/* Modal nueva factura */}
       {mostrarFormFactura && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+        <Modal titulo="Nueva factura" onClose={() => { setMostrarFormFactura(false); setFormFactura(formFacturaVacio); setError('') }}>
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
           <form onSubmit={handleSubmitFactura} className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor *</label>
@@ -178,7 +190,6 @@ export default function Facturas() {
                 ))}
               </select>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">N° de factura *</label>
               <input
@@ -188,7 +199,6 @@ export default function Facturas() {
                 placeholder="FAC-2026-001"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de factura *</label>
               <input
@@ -198,7 +208,6 @@ export default function Facturas() {
                 onChange={e => setFormFactura({ ...formFactura, fecha_factura: e.target.value })}
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Monto ({proveedorSeleccionado?.moneda ?? '—'}) *
@@ -213,7 +222,6 @@ export default function Facturas() {
                 placeholder="0.00"
               />
             </div>
-
             {proveedorSeleccionado && (
               <div className="flex items-end pb-2">
                 <p className="text-sm text-gray-500">
@@ -226,7 +234,6 @@ export default function Facturas() {
                 </p>
               </div>
             )}
-
             <div className="col-span-2 flex gap-3 justify-end pt-2">
               <button
                 type="button"
@@ -244,32 +251,26 @@ export default function Facturas() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
 
       {/* Modal pagos */}
       {mostrarPagos && facturaSeleccionada && (
-      <Modal titulo={`Pagos — ${facturaSeleccionada.numero_factura}`} onClose={() => { setMostrarPagos(false); setError('') }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-medium text-gray-800">
-                Pagos — {facturaSeleccionada.numero_factura}
-              </h2>
-              <p className="text-sm text-gray-500">
-                Saldo pendiente: <span className="font-semibold text-gray-800">
-                  {facturaSeleccionada.proveedor.moneda === 'USD' ? '$' : '₡'}
-                  {Number(facturaSeleccionada.saldo_pendiente).toLocaleString('es-CR')}
-                </span>
-              </p>
-            </div>
+        <Modal titulo={`Pagos — ${facturaSeleccionada.numero_factura}`} onClose={() => { setMostrarPagos(false); setError('') }}>
+          <div className="mb-3">
+            <p className="text-sm text-gray-500">
+              Saldo pendiente: <span className="font-semibold text-gray-800">
+                {facturaSeleccionada.proveedor.moneda === 'USD' ? '$' : '₡'}
+                {Number(facturaSeleccionada.saldo_pendiente).toLocaleString('es-CR')}
+              </span>
+            </p>
           </div>
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
           {facturaSeleccionada.estado !== 'pagada' && (
             <form onSubmit={handleSubmitPago} className="grid grid-cols-2 gap-4 border-t pt-4">
               <h3 className="col-span-2 text-sm font-medium text-gray-700">Registrar pago</h3>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de pago *</label>
                 <input
@@ -279,7 +280,6 @@ export default function Facturas() {
                   onChange={e => setFormPago({ ...formPago, fecha_pago: e.target.value })}
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Monto pagado *</label>
                 <input
@@ -292,7 +292,6 @@ export default function Facturas() {
                   placeholder="0.00"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">N° comprobante</label>
                 <input
@@ -302,7 +301,6 @@ export default function Facturas() {
                   placeholder="TRF-20260316-001"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
                 <input
@@ -312,7 +310,6 @@ export default function Facturas() {
                   placeholder="Opcional"
                 />
               </div>
-
               <div className="col-span-2 flex justify-end">
                 <button
                   type="submit"
@@ -354,7 +351,30 @@ export default function Facturas() {
         </Modal>
       )}
 
-      {/* Tabla de facturas */}
+      {/* Modal confirmar eliminar */}
+      {confirmEliminar && (
+        <Modal titulo="Eliminar factura" onClose={() => setConfirmEliminar(null)}>
+          <p className="text-gray-700 text-sm mb-6">
+            ¿Seguro que deseas eliminar la factura <span className="font-semibold">{confirmEliminar.numero_factura}</span>? Esta acción no se puede deshacer.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => setConfirmEliminar(null)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              onClick={() => eliminar.mutate(confirmEliminar.id)}
+              disabled={eliminar.isPending}
+              className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {eliminar.isPending ? 'Eliminando...' : 'Sí, eliminar'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={cerrarToast} />}
+
+      {/* Tabla */}
       {isLoading ? (
         <p className="text-gray-500 text-sm">Cargando facturas...</p>
       ) : (
@@ -391,12 +411,14 @@ export default function Facturas() {
                     <EstadoBadge estado={f.estado} />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => abrirPagos(f)}
-                      className="text-green-600 hover:text-green-800 text-xs font-medium"
-                    >
-                      Pagos
-                    </button>
+                    <div className="flex gap-3 justify-center">
+                      <button onClick={() => abrirPagos(f)} className="text-green-600 hover:text-green-800 text-xs font-medium">
+                        Pagos
+                      </button>
+                      <button onClick={() => setConfirmEliminar(f)} className="text-red-500 hover:text-red-700 text-xs font-medium">
+                        Eliminar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -407,7 +429,6 @@ export default function Facturas() {
           )}
         </div>
       )}
-      {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={cerrarToast} />}
     </div>
   )
 }

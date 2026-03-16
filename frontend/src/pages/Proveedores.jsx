@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getProveedores, crearProveedor, actualizarProveedor } from '../api/proveedores'
+import { getProveedores, crearProveedor, actualizarProveedor, eliminarProveedor } from '../api/proveedores'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
 
@@ -22,6 +22,7 @@ export default function Proveedores() {
   const [form, setForm] = useState(formVacio)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
+  const [confirmEliminar, setConfirmEliminar] = useState(null)
 
   const { data: proveedores = [], isLoading } = useQuery({
     queryKey: ['proveedores'],
@@ -52,6 +53,16 @@ export default function Proveedores() {
       setToast({ mensaje: 'Proveedor actualizado correctamente.', tipo: 'exito' })
     },
     onError: () => setError('Error al actualizar el proveedor.')
+  })
+
+  const eliminar = useMutation({
+    mutationFn: eliminarProveedor,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['proveedores'])
+      setConfirmEliminar(null)
+      setToast({ mensaje: 'Proveedor eliminado.', tipo: 'exito' })
+    },
+    onError: () => setToast({ mensaje: 'No se puede eliminar — tiene facturas asociadas.', tipo: 'error' })
   })
 
   function abrirNuevo() {
@@ -88,6 +99,7 @@ export default function Proveedores() {
         </button>
       </div>
 
+      {/* Modal nuevo/editar */}
       {mostrarModal && (
         <Modal titulo={editando ? 'Editar proveedor' : 'Nuevo proveedor'} onClose={() => setMostrarModal(false)}>
           {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
@@ -151,6 +163,27 @@ export default function Proveedores() {
         </Modal>
       )}
 
+      {/* Modal confirmación eliminar */}
+      {confirmEliminar && (
+        <Modal titulo="Eliminar proveedor" onClose={() => setConfirmEliminar(null)}>
+          <p className="text-gray-700 text-sm mb-6">
+            ¿Seguro que deseas eliminar a <span className="font-semibold">{confirmEliminar.nombre}</span>? Esta acción no se puede deshacer.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => setConfirmEliminar(null)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              onClick={() => eliminar.mutate(confirmEliminar.id)}
+              disabled={eliminar.isPending}
+              className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {eliminar.isPending ? 'Eliminando...' : 'Sí, eliminar'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={cerrarToast} />}
 
       {isLoading ? (
@@ -182,9 +215,12 @@ export default function Proveedores() {
                   <td className="px-4 py-3 text-center text-gray-600">
                     {p.plazo_dias === 0 ? 'Inmediato' : `${p.plazo_dias} días`}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-center flex gap-3 justify-center">
                     <button onClick={() => abrirEditar(p)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
                       Editar
+                    </button>
+                    <button onClick={() => setConfirmEliminar(p)} className="text-red-500 hover:text-red-700 text-xs font-medium">
+                      Eliminar
                     </button>
                   </td>
                 </tr>
