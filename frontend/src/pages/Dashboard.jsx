@@ -1,3 +1,4 @@
+import { formatFecha } from '../utils/fecha'
 import { useQuery } from '@tanstack/react-query'
 import { getDashboard, getFacturas } from '../api/facturas'
 import EstadoBadge from '../components/EstadoBadge'
@@ -79,7 +80,7 @@ function Section({ titulo, facturas }) {
               <tr key={f.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-800">{f.proveedor.nombre}</td>
                 <td className="px-4 py-3 text-gray-600">{f.numero_factura}</td>
-                <td className="px-4 py-3 text-gray-600">{f.fecha_vencimiento}</td>
+                <td className="px-4 py-3 text-gray-600">{formatFecha(f.fecha_vencimiento)}</td>
                 <td className="px-4 py-3 text-right font-medium text-gray-800">
                   {f.proveedor.moneda === 'USD' ? '$' : '₡'}
                   {Number(f.saldo_pendiente).toLocaleString('es-CR')}

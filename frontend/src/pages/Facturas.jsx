@@ -1,3 +1,4 @@
+import { formatFecha } from '../utils/fecha'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getFacturas, crearFactura } from '../api/facturas'
@@ -333,7 +334,7 @@ export default function Facturas() {
                 <tbody className="divide-y divide-gray-100">
                   {pagosFactura.map(p => (
                     <tr key={p.id}>
-                      <td className="py-2 text-gray-600">{p.fecha_pago}</td>
+                      <td className="py-2 text-gray-600">{formatFecha(p.fecha_pago)}</td>
                       <td className="py-2 text-gray-600">{p.numero_comprobante ?? '—'}</td>
                       <td className="py-2 text-right font-medium text-gray-800">
                         {facturaSeleccionada.proveedor.moneda === 'USD' ? '$' : '₡'}
@@ -371,8 +372,8 @@ export default function Facturas() {
                 <tr key={f.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-800">{f.proveedor.nombre}</td>
                   <td className="px-4 py-3 text-gray-600">{f.numero_factura}</td>
-                  <td className="px-4 py-3 text-gray-600">{f.fecha_factura}</td>
-                  <td className="px-4 py-3 text-gray-600">{f.fecha_vencimiento}</td>
+                  <td className="px-4 py-3 text-gray-600">{formatFecha(f.fecha_factura)}</td>
+                  <td className="px-4 py-3 text-gray-600">{formatFecha(f.fecha_vencimiento)}</td>
                   <td className="px-4 py-3 text-right text-gray-600">
                     {f.proveedor.moneda === 'USD' ? '$' : '₡'}
                     {Number(f.monto_original).toLocaleString('es-CR')}
