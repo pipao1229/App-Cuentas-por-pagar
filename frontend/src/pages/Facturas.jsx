@@ -5,6 +5,9 @@ import { getFacturas, crearFactura } from '../api/facturas'
 import { getProveedores } from '../api/proveedores'
 import { registrarPago, getPagosPorFactura } from '../api/pagos'
 import EstadoBadge from '../components/EstadoBadge'
+import Modal from '../components/Modal'
+import Toast from '../components/Toast'
+import { useCallback } from 'react'
 
 const formFacturaVacio = {
   proveedor_id: '', numero_factura: '', fecha_factura: '', monto_original: ''
@@ -24,6 +27,8 @@ export default function Facturas() {
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroProveedor, setFiltroProveedor] = useState('')
   const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
+  const cerrarToast = useCallback(() => setToast(null), [])
 
   const { data: facturas = [], isLoading } = useQuery({
     queryKey: ['facturas', filtroEstado, filtroProveedor],
@@ -64,6 +69,8 @@ export default function Facturas() {
       queryClient.invalidateQueries(['pagos', facturaSeleccionada?.id])
       setFormPago(formPagoVacio)
       setError('')
+      setMostrarPagos(false)
+      setToast({ mensaje: 'Pago registrado correctamente.', tipo: 'exito' })
     },
     onError: (e) => setError(e.response?.data?.detail ?? 'Error al registrar el pago.')
   })
@@ -156,7 +163,6 @@ export default function Facturas() {
       {/* Formulario nueva factura */}
       {mostrarFormFactura && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-medium text-gray-800">Nueva factura</h2>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <form onSubmit={handleSubmitFactura} className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -243,7 +249,7 @@ export default function Facturas() {
 
       {/* Modal pagos */}
       {mostrarPagos && facturaSeleccionada && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+      <Modal titulo={`Pagos — ${facturaSeleccionada.numero_factura}`} onClose={() => { setMostrarPagos(false); setError('') }}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-medium text-gray-800">
@@ -256,7 +262,6 @@ export default function Facturas() {
                 </span>
               </p>
             </div>
-            <button onClick={() => { setMostrarPagos(false); setError('') }} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
           </div>
 
           {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -346,7 +351,7 @@ export default function Facturas() {
               </table>
             </div>
           )}
-        </div>
+        </Modal>
       )}
 
       {/* Tabla de facturas */}
@@ -402,6 +407,7 @@ export default function Facturas() {
           )}
         </div>
       )}
+      {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={cerrarToast} />}
     </div>
   )
 }

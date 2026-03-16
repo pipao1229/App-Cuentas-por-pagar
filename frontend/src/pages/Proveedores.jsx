@@ -1,31 +1,43 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProveedores, crearProveedor, actualizarProveedor } from '../api/proveedores'
+import Modal from '../components/Modal'
+import Toast from '../components/Toast'
 
 const MONEDAS = ['CRC', 'USD']
 const PLAZOS = [0, 8, 15, 30, 45, 60]
+const formVacio = { nombre: '', telefono: '', contacto: '', moneda: 'CRC', plazo_dias: 30 }
 
-const formVacio = {
-  nombre: '', telefono: '', contacto: '', moneda: 'CRC', plazo_dias: 30
+function validarForm(form) {
+  if (!form.nombre.trim()) return 'El nombre es obligatorio.'
+  if (form.telefono && !/^\d{4}-\d{4}$/.test(form.telefono))
+    return 'El teléfono debe tener el formato ####-####.'
+  return null
 }
 
 export default function Proveedores() {
   const queryClient = useQueryClient()
-  const [mostrarForm, setMostrarForm] = useState(false)
+  const [mostrarModal, setMostrarModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState(formVacio)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
 
   const { data: proveedores = [], isLoading } = useQuery({
     queryKey: ['proveedores'],
     queryFn: () => getProveedores().then(r => r.data)
   })
 
+  const cerrarToast = useCallback(() => setToast(null), [])
+
   const crear = useMutation({
     mutationFn: crearProveedor,
     onSuccess: () => {
       queryClient.invalidateQueries(['proveedores'])
-      cerrarForm()
+      setMostrarModal(false)
+      setForm(formVacio)
+      setError('')
+      setToast({ mensaje: 'Proveedor creado correctamente.', tipo: 'exito' })
     },
     onError: () => setError('Error al guardar el proveedor.')
   })
@@ -34,7 +46,10 @@ export default function Proveedores() {
     mutationFn: ({ id, datos }) => actualizarProveedor(id, datos),
     onSuccess: () => {
       queryClient.invalidateQueries(['proveedores'])
-      cerrarForm()
+      setMostrarModal(false)
+      setForm(formVacio)
+      setError('')
+      setToast({ mensaje: 'Proveedor actualizado correctamente.', tipo: 'exito' })
     },
     onError: () => setError('Error al actualizar el proveedor.')
   })
@@ -43,26 +58,20 @@ export default function Proveedores() {
     setForm(formVacio)
     setEditando(null)
     setError('')
-    setMostrarForm(true)
+    setMostrarModal(true)
   }
 
   function abrirEditar(p) {
     setForm({ nombre: p.nombre, telefono: p.telefono ?? '', contacto: p.contacto ?? '', moneda: p.moneda, plazo_dias: p.plazo_dias })
     setEditando(p.id)
     setError('')
-    setMostrarForm(true)
-  }
-
-  function cerrarForm() {
-    setMostrarForm(false)
-    setEditando(null)
-    setForm(formVacio)
-    setError('')
+    setMostrarModal(true)
   }
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!form.nombre.trim()) return setError('El nombre es obligatorio.')
+    const err = validarForm(form)
+    if (err) return setError(err)
     if (editando) {
       actualizar.mutate({ id: editando, datos: form })
     } else {
@@ -74,22 +83,14 @@ export default function Proveedores() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-800">Proveedores</h1>
-        <button
-          onClick={abrirNuevo}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={abrirNuevo} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
           + Nuevo proveedor
         </button>
       </div>
 
-      {mostrarForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-medium text-gray-800">
-            {editando ? 'Editar proveedor' : 'Nuevo proveedor'}
-          </h2>
-
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-
+      {mostrarModal && (
+        <Modal titulo={editando ? 'Editar proveedor' : 'Nuevo proveedor'} onClose={() => setMostrarModal(false)}>
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
@@ -100,7 +101,6 @@ export default function Proveedores() {
                 placeholder="Nombre del proveedor"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
               <input
@@ -110,7 +110,6 @@ export default function Proveedores() {
                 placeholder="2222-3333"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Contacto / correo</label>
               <input
@@ -120,7 +119,6 @@ export default function Proveedores() {
                 placeholder="nombre@correo.com"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
               <select
@@ -131,9 +129,8 @@ export default function Proveedores() {
                 {MONEDAS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Plazo de pago (días)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Plazo de pago</label>
               <select
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={form.plazo_dias}
@@ -142,26 +139,19 @@ export default function Proveedores() {
                 {PLAZOS.map(p => <option key={p} value={p}>{p === 0 ? 'Inmediato (0 días)' : `${p} días`}</option>)}
               </select>
             </div>
-
             <div className="col-span-2 flex gap-3 justify-end pt-2">
-              <button
-                type="button"
-                onClick={cerrarForm}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
+              <button type="button" onClick={() => setMostrarModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
                 Cancelar
               </button>
-              <button
-                type="submit"
-                disabled={crear.isPending || actualizar.isPending}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
+              <button type="submit" disabled={crear.isPending || actualizar.isPending} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {crear.isPending || actualizar.isPending ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
+
+      {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={cerrarToast} />}
 
       {isLoading ? (
         <p className="text-gray-500 text-sm">Cargando proveedores...</p>
@@ -193,10 +183,7 @@ export default function Proveedores() {
                     {p.plazo_dias === 0 ? 'Inmediato' : `${p.plazo_dias} días`}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => abrirEditar(p)}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                    >
+                    <button onClick={() => abrirEditar(p)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
                       Editar
                     </button>
                   </td>
