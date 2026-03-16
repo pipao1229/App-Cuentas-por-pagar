@@ -10,11 +10,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://app-cuentas-por-pagar.vercel.app"
-    ],
-    allow_credentials=True,
+    allow_origin_regex="https://.*\\.vercel\\.app|http://localhost:5173",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
