@@ -11,7 +11,7 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-      <span className="font-bold text-2x1 text-gray-800">Cuentas por Pagar</span>
+      <span className="font-bold text-2xl text-gray-800">Cuentas por Pagar</span>
       <div className="flex gap-6">
         {links.map(link => (
           <Link
