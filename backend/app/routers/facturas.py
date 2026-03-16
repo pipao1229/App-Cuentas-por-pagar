@@ -73,6 +73,9 @@ def eliminar_factura(factura_id: str, db: Session = Depends(get_db)):
     factura = db.query(Factura).filter(Factura.id == factura_id).first()
     if not factura:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
+    # Eliminar pagos asociados primero
+    from app.models.models import Pago
+    db.query(Pago).filter(Pago.factura_id == factura_id).delete()
     db.delete(factura)
     db.commit()
     return {"ok": True}
