@@ -116,7 +116,8 @@ def actualizar_factura(factura_id: str, datos: FacturaCreate, db: Session = Depe
     fecha_vencimiento = datos.fecha_factura + timedelta(days=proveedor.plazo_dias)
     
     # Recalcular saldo si cambió el monto
-    diferencia = datos.monto_original - factura.monto_original
+    from decimal import Decimal
+    diferencia = Decimal(str(datos.monto_original)) - factura.monto_original
     nuevo_saldo = factura.saldo_pendiente + diferencia
     if nuevo_saldo < 0:
         nuevo_saldo = 0
