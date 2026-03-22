@@ -1,5 +1,6 @@
 import { formatFecha } from '../utils/fecha'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getFacturas, crearFactura, eliminarFactura } from '../api/facturas'
 import { getProveedores } from '../api/proveedores'
@@ -29,6 +30,8 @@ export default function Facturas() {
   const [toast, setToast] = useState(null)
   const [confirmEliminar, setConfirmEliminar] = useState(null)
   const cerrarToast = useCallback(() => setToast(null), [])
+  const location = useLocation()
+  const yaAbrio = useRef(false)
 
   const { data: facturas = [], isLoading } = useQuery({
     queryKey: ['facturas', filtroEstado, filtroProveedor],
@@ -124,6 +127,17 @@ export default function Facturas() {
   }
 
   const proveedorSeleccionado = proveedores.find(p => p.id === formFactura.proveedor_id)
+
+  useEffect(() => {
+    if (yaAbrio.current) return
+    if (location.state?.abrirPago && facturas.length > 0) {
+      const factura = facturas.find(f => f.id === location.state.abrirPago)
+      if (factura) {
+        yaAbrio.current = true
+        setTimeout(() => abrirPagos(factura), 0)
+      }
+    }
+  }, [location.state, facturas])
 
   return (
     <div className="space-y-6">

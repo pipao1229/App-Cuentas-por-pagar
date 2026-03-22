@@ -2,6 +2,7 @@ import { formatFecha } from '../utils/fecha'
 import { useQuery } from '@tanstack/react-query'
 import { getDashboard, getFacturas } from '../api/facturas'
 import EstadoBadge from '../components/EstadoBadge'
+import { useNavigate } from 'react-router-dom'
 
 function TarjetaResumen({ titulo, valor, color }) {
   return (
@@ -33,21 +34,9 @@ export default function Dashboard() {
       <h1 className="text-2xl font-semibold text-gray-800">Dashboard</h1>
 
       <div className="grid grid-cols-3 gap-4">
-        <TarjetaResumen
-          titulo="Facturas pendientes"
-          valor={resumen?.pendientes ?? '—'}
-          color="bg-yellow-500"
-        />
-        <TarjetaResumen
-          titulo="Próximas a vencer (7 días)"
-          valor={resumen?.proximas_a_vencer ?? '—'}
-          color="bg-blue-500"
-        />
-        <TarjetaResumen
-          titulo="Facturas vencidas"
-          valor={resumen?.vencidas ?? '—'}
-          color="bg-red-500"
-        />
+        <TarjetaResumen titulo="Facturas pendientes" valor={resumen?.pendientes ?? '—'} color="bg-yellow-500" />
+        <TarjetaResumen titulo="Próximas a vencer (7 días)" valor={resumen?.proximas_a_vencer ?? '—'} color="bg-blue-500" />
+        <TarjetaResumen titulo="Facturas vencidas" valor={resumen?.vencidas ?? '—'} color="bg-red-500" />
       </div>
 
       <div className="space-y-6">
@@ -59,6 +48,8 @@ export default function Dashboard() {
 }
 
 function Section({ titulo, facturas }) {
+  const navigate = useNavigate()
+
   if (!facturas?.length) return null
 
   return (
@@ -73,6 +64,7 @@ function Section({ titulo, facturas }) {
               <th className="px-4 py-3 text-left">Vencimiento</th>
               <th className="px-4 py-3 text-right">Saldo</th>
               <th className="px-4 py-3 text-center">Estado</th>
+              <th className="px-4 py-3 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -87,6 +79,16 @@ function Section({ titulo, facturas }) {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <EstadoBadge estado={f.estado} />
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {f.estado !== 'pagada' && (
+                    <button
+                      onClick={() => navigate('/facturas', { state: { abrirPago: f.id } })}
+                      className="bg-green-600 text-white text-xs px-3 py-1 rounded-lg hover:bg-green-700 font-medium"
+                    >
+                      Pagar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
