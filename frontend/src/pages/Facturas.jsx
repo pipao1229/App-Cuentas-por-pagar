@@ -8,6 +8,8 @@ import { registrarPago, getPagosPorFactura } from '../api/pagos'
 import EstadoBadge from '../components/EstadoBadge'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const formFacturaVacio = {
   proveedor_id: '', numero_factura: '', fecha_factura: '', monto_original: ''
@@ -179,10 +181,44 @@ export default function Facturas() {
     }
   }, [location.state, facturas])
 
+  function exportarPDF() {
+    const doc = new jsPDF()
+    
+    doc.setFontSize(16)
+    doc.text('Cuentas por Pagar — Facturas', 14, 15)
+    doc.setFontSize(10)
+    doc.text(`Generado: ${new Date().toLocaleDateString('es-CR')}`, 14, 22)
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Proveedor', 'N° Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
+      body: facturas.map(f => [
+        f.proveedor.nombre,
+        f.numero_factura,
+        formatFecha(f.fecha_factura),
+        formatFecha(f.fecha_vencimiento),
+        `${f.proveedor.moneda === 'USD' ? '$' : '₡'}${Number(f.monto_original).toLocaleString('es-CR')}`,
+        `${f.proveedor.moneda === 'USD' ? '$' : '₡'}${Number(f.saldo_pendiente).toLocaleString('es-CR')}`,
+        f.estado
+      ]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [37, 99, 235] }
+    })
+
+    doc.save('facturas.pdf')
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-800">Facturas</h1>
+        <div className="flex gap-3">
+        <button
+          onClick={exportarPDF}
+          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+        >
+          Exportar PDF
+        </button>
         <button
           onClick={() => { setMostrarFormFactura(true); setError('') }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -190,6 +226,7 @@ export default function Facturas() {
           + Nueva factura
         </button>
       </div>
+    </div>
 
       {/* Filtros */}
       <div className="flex gap-4">
