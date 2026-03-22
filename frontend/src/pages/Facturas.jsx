@@ -2,7 +2,7 @@ import { formatFecha } from '../utils/fecha'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getFacturas, crearFactura, eliminarFactura } from '../api/facturas'
+import { getFacturas, crearFactura, eliminarFactura, actualizarFactura } from '../api/facturas'
 import { getProveedores } from '../api/proveedores'
 import { registrarPago, getPagosPorFactura } from '../api/pagos'
 import EstadoBadge from '../components/EstadoBadge'
@@ -29,6 +29,8 @@ export default function Facturas() {
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
   const [confirmEliminar, setConfirmEliminar] = useState(null)
+  const [editandoFactura, setEditandoFactura] = useState(null)
+  const [formEditar, setFormEditar] = useState(formFacturaVacio)
   const cerrarToast = useCallback(() => setToast(null), [])
   const location = useLocation()
   const yaAbrio = useRef(false)
@@ -76,6 +78,19 @@ export default function Facturas() {
     onError: () => setToast({ mensaje: 'Error al eliminar la factura.', tipo: 'error' })
   })
 
+  const actualizarFact = useMutation({
+    mutationFn: ({ id, datos }) => actualizarFactura(id, datos),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['facturas'])
+      queryClient.invalidateQueries(['dashboard'])
+      setEditandoFactura(null)
+      setFormEditar(formFacturaVacio)
+      setError('')
+      setToast({ mensaje: 'Factura actualizada correctamente.', tipo: 'exito' })
+    },
+    onError: (e) => setError(e.response?.data?.detail ?? 'Error al actualizar la factura.')
+  })
+
   const registrarPagoMutation = useMutation({
     mutationFn: registrarPago,
     onSuccess: () => {
@@ -119,11 +134,36 @@ export default function Facturas() {
     })
   }
 
+  function handleSubmitEditar(e) {
+    e.preventDefault()
+    if (!formEditar.proveedor_id) return setError('Selecciona un proveedor.')
+    if (!formEditar.numero_factura.trim()) return setError('El número de factura es obligatorio.')
+    if (!formEditar.fecha_factura) return setError('La fecha es obligatoria.')
+    if (!formEditar.monto_original || Number(formEditar.monto_original) <= 0)
+      return setError('El monto debe ser mayor a 0.')
+    setError('')
+    actualizarFact.mutate({
+      id: editandoFactura.id,
+      datos: { ...formEditar, monto_original: Number(formEditar.monto_original) }
+    })
+  }
+
   function abrirPagos(factura) {
     setFacturaSeleccionada(factura)
     setMostrarPagos(true)
     setError('')
     setFormPago(formPagoVacio)
+  }
+
+  function abrirEditar(f) {
+    setFormEditar({
+      proveedor_id: f.proveedor_id,
+      numero_factura: f.numero_factura,
+      fecha_factura: f.fecha_factura,
+      monto_original: f.monto_original
+    })
+    setEditandoFactura(f)
+    setError('')
   }
 
   const proveedorSeleccionado = proveedores.find(p => p.id === formFactura.proveedor_id)
@@ -365,6 +405,64 @@ export default function Facturas() {
         </Modal>
       )}
 
+      {/* Modal editar factura */}
+      {editandoFactura && (
+        <Modal titulo="Editar factura" onClose={() => { setEditandoFactura(null); setError('') }}>
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+          <form onSubmit={handleSubmitEditar} className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor *</label>
+              <select
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formEditar.proveedor_id}
+                onChange={e => setFormEditar({ ...formEditar, proveedor_id: e.target.value })}
+              >
+                <option value="">Selecciona un proveedor</option>
+                {proveedores.map(p => (
+                  <option key={p.id} value={p.id}>{p.nombre} ({p.moneda} — {p.plazo_dias === 0 ? 'inmediato' : `${p.plazo_dias} días`})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">N° de factura *</label>
+              <input
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formEditar.numero_factura}
+                onChange={e => setFormEditar({ ...formEditar, numero_factura: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de factura *</label>
+              <input
+                type="date"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formEditar.fecha_factura}
+                onChange={e => setFormEditar({ ...formEditar, fecha_factura: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Monto *</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formEditar.monto_original}
+                onChange={e => setFormEditar({ ...formEditar, monto_original: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2 flex gap-3 justify-end pt-2">
+              <button type="button" onClick={() => { setEditandoFactura(null); setError('') }} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button type="submit" disabled={actualizarFact.isPending} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {actualizarFact.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {/* Modal confirmar eliminar */}
       {confirmEliminar && (
         <Modal titulo="Eliminar factura" onClose={() => setConfirmEliminar(null)}>
@@ -428,6 +526,9 @@ export default function Facturas() {
                     <div className="flex gap-3 justify-center">
                       <button onClick={() => abrirPagos(f)} className="text-green-600 hover:text-green-800 text-xs font-medium">
                         Pagos
+                      </button>
+                      <button onClick={() => abrirEditar(f)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+                        Editar
                       </button>
                       <button onClick={() => setConfirmEliminar(f)} className="text-red-500 hover:text-red-700 text-xs font-medium">
                         Eliminar

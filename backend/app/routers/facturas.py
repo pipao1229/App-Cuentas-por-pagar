@@ -102,6 +102,39 @@ def obtener_factura(id: str, db: Session = Depends(get_db)):
     actualizar_estado(factura, db, hoy)
     return factura
 
+@router.put("/{factura_id}", response_model=FacturaOut)
+def actualizar_factura(factura_id: str, datos: FacturaCreate, db: Session = Depends(get_db)):
+    factura = db.query(Factura).options(joinedload(Factura.proveedor)).filter(Factura.id == factura_id).first()
+    if not factura:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    
+    proveedor = db.query(Proveedor).filter(Proveedor.id == str(datos.proveedor_id)).first()
+    if not proveedor:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+
+    from datetime import timedelta
+    fecha_vencimiento = datos.fecha_factura + timedelta(days=proveedor.plazo_dias)
+    
+    # Recalcular saldo si cambió el monto
+    diferencia = datos.monto_original - factura.monto_original
+    nuevo_saldo = factura.saldo_pendiente + diferencia
+    if nuevo_saldo < 0:
+        nuevo_saldo = 0
+
+    factura.proveedor_id = datos.proveedor_id
+    factura.numero_factura = datos.numero_factura
+    factura.fecha_factura = datos.fecha_factura
+    factura.fecha_vencimiento = fecha_vencimiento
+    factura.monto_original = datos.monto_original
+    factura.saldo_pendiente = nuevo_saldo
+
+    db.commit()
+    db.refresh(factura)
+    factura = db.query(Factura).options(joinedload(Factura.proveedor)).filter(Factura.id == factura_id).first()
+    actualizar_estado(factura, db, date.today())
+    return factura
+
+
 @router.delete("/{factura_id}")
 def eliminar_factura(factura_id: str, db: Session = Depends(get_db)):
     factura = db.query(Factura).filter(Factura.id == factura_id).first()
