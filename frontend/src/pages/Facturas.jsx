@@ -192,15 +192,18 @@ export default function Facturas() {
     autoTable(doc, {
       startY: 28,
       head: [['Proveedor', 'N° Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
-      body: facturas.map(f => [
-        f.proveedor.nombre,
-        f.numero_factura,
-        formatFecha(f.fecha_factura),
-        formatFecha(f.fecha_vencimiento),
-        `${f.proveedor.moneda === 'USD' ? '$' : '₡'}${Number(f.monto_original).toLocaleString('es-CR')}`,
-        `${f.proveedor.moneda === 'USD' ? '$' : '₡'}${Number(f.saldo_pendiente).toLocaleString('es-CR')}`,
-        f.estado
-      ]),
+      body: facturas.map(f => {
+        const simbolo = f.proveedor.moneda === 'USD' ? '$' : 'CRC '
+        return [
+          f.proveedor.nombre,
+          f.numero_factura,
+          formatFecha(f.fecha_factura),
+          formatFecha(f.fecha_vencimiento),
+          `${simbolo}${Number(f.monto_original).toLocaleString('es-CR')}`,
+          `${simbolo}${Number(f.saldo_pendiente).toLocaleString('es-CR')}`,
+          f.estado
+        ]
+      }),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [37, 99, 235] }
     })
@@ -215,7 +218,7 @@ export default function Facturas() {
         <div className="flex gap-3">
         <button
           onClick={exportarPDF}
-          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
         >
           Exportar PDF
         </button>
