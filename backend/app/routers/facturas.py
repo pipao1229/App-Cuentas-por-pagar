@@ -15,8 +15,6 @@ def calcular_estado(factura: Factura, hoy: date) -> str:
         return "pagada"
     if factura.fecha_vencimiento < hoy:
         return "vencida"
-    if factura.saldo_pendiente < factura.monto_original:
-        return "parcial"
     return "pendiente"
 
 def actualizar_estado(factura: Factura, db: Session, hoy: date):
@@ -79,10 +77,10 @@ def resumen_dashboard(db: Session = Depends(get_db)):
     for f in todas:
         actualizar_estado(f, db, hoy)
 
-    pendientes = db.query(Factura).filter(Factura.estado.in_(["pendiente", "parcial"])).count()
+    pendientes = db.query(Factura).filter(Factura.estado == "pendiente").count()
     vencidas   = db.query(Factura).filter(Factura.estado == "vencida").count()
     proximas   = db.query(Factura).filter(
-        Factura.estado.in_(["pendiente", "parcial"]),
+        Factura.estado == "pendiente",
         Factura.fecha_vencimiento <= date.fromordinal(hoy.toordinal() + proximos_dias),
         Factura.fecha_vencimiento >= hoy
     ).count()

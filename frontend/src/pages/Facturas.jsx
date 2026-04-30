@@ -58,21 +58,28 @@ export default function Facturas() {
   })
  
   // ── Totales calculados desde las facturas visibles ──────────────────────────
-  // Se calculan sobre TODAS las facturas sin filtro de moneda (mezcladas),
-  // igual que como muestra la tabla actualmente.
+  // Se agrupan por moneda (CRC y USD) para mostrar símbolo correcto.
   const totales = facturas.reduce(
     (acc, f) => {
+      const moneda = f.proveedor.moneda === 'USD' ? 'USD' : 'CRC'
       const saldo = Number(f.saldo_pendiente)
       if (f.estado === 'vencida') {
-        acc.vencido += saldo
-        acc.pendiente += saldo
-      } else if (f.estado === 'pendiente' || f.estado === 'parcial') {
-        acc.pendiente += saldo
+        acc.vencido[moneda]  = (acc.vencido[moneda]  || 0) + saldo
+        acc.pendiente[moneda] = (acc.pendiente[moneda] || 0) + saldo
+      } else if (f.estado === 'pendiente') {
+        acc.pendiente[moneda] = (acc.pendiente[moneda] || 0) + saldo
       }
       return acc
     },
-    { pendiente: 0, vencido: 0 }
+    { pendiente: {}, vencido: {} }
   )
+
+  function formatTotales(totalesPorMoneda) {
+    const partes = []
+    if (totalesPorMoneda.CRC) partes.push(`₡${totalesPorMoneda.CRC.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+    if (totalesPorMoneda.USD) partes.push(`$${totalesPorMoneda.USD.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+    return partes.length ? partes : ['0,00']
+  }
  
   const crearFact = useMutation({
     mutationFn: crearFactura,
@@ -205,11 +212,23 @@ export default function Facturas() {
     doc.text('Cuentas por Pagar — Facturas', 14, 15)
     doc.setFontSize(10)
     doc.text(`Generado: ${new Date().toLocaleDateString('es-CR')}`, 14, 22)
+
+    // Filtros activos como subtítulo
+    const partesFiltro = []
+    if (filtroEstado) partesFiltro.push(`Estado: ${filtroEstado}`)
+    if (filtroProveedor) {
+      const prov = proveedores.find(p => p.id === filtroProveedor)
+      if (prov) partesFiltro.push(`Proveedor: ${prov.nombre}`)
+    }
+    if (partesFiltro.length) doc.text(`Filtros: ${partesFiltro.join(' | ')}`, 14, 29)
+
+    const startY = partesFiltro.length ? 35 : 28
+
     autoTable(doc, {
-      startY: 28,
+      startY,
       head: [['Proveedor', 'N° Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
       body: facturas.map(f => {
-        const simbolo = f.proveedor.moneda === 'USD' ? '$' : 'CRC '
+        const simbolo = f.proveedor.moneda === 'USD' ? '$' : '₡'
         return [
           f.proveedor.nombre,
           f.numero_factura,
@@ -223,6 +242,20 @@ export default function Facturas() {
       styles: { fontSize: 9 },
       headStyles: { fillColor: [37, 99, 235] }
     })
+
+    // Totales al final del PDF
+    const finalY = doc.lastAutoTable.finalY + 8
+    doc.setFontSize(10)
+    doc.setFont(undefined, 'bold')
+    doc.text('Resumen de totales (según filtros aplicados):', 14, finalY)
+    doc.setFont(undefined, 'normal')
+
+    const lineaBase = finalY + 6
+    const pendientesTexto = formatTotales(totales.pendiente).join('  /  ')
+    const vencidosTexto   = formatTotales(totales.vencido).join('  /  ')
+    doc.text(`Total pendiente: ${pendientesTexto}`, 14, lineaBase)
+    doc.text(`Total vencido:   ${vencidosTexto}`,   14, lineaBase + 6)
+
     doc.save('facturas.pdf')
   }
  
@@ -237,6 +270,26 @@ export default function Facturas() {
       'Saldo pendiente': Number(f.saldo_pendiente),
       Estado: f.estado
     }))
+
+    // Filas de totales separadas por moneda
+    filas.push({})  // fila vacía como separador
+    const monedasUsadas = [...new Set(facturas.map(f => f.proveedor.moneda))]
+    monedasUsadas.forEach(moneda => {
+      const simbolo = moneda === 'USD' ? '$' : '₡'
+      const pendM = totales.pendiente[moneda] || 0
+      const vencM = totales.vencido[moneda]   || 0
+      filas.push({
+        Proveedor: `TOTAL ${moneda}`,
+        Moneda: moneda,
+        'N° Factura': '',
+        Fecha: '',
+        Vencimiento: '',
+        'Monto original': '',
+        'Saldo pendiente': `${simbolo}${pendM.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pendiente  |  ${simbolo}${vencM.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} vencido`,
+        Estado: ''
+      })
+    })
+
     const ws = XLSX.utils.json_to_sheet(filas)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Facturas')
@@ -279,7 +332,6 @@ export default function Facturas() {
         >
           <option value="">Todos los estados</option>
           <option value="pendiente">Pendiente</option>
-          <option value="parcial">Parcial</option>
           <option value="pagada">Pagada</option>
           <option value="vencida">Vencida</option>
         </select>
@@ -309,15 +361,15 @@ export default function Facturas() {
           <div className="ml-auto flex gap-3">
             <div className="border border-orange-200 bg-orange-50 rounded-lg px-4 py-2 text-sm min-w-[170px]">
               <p className="text-orange-600 font-medium text-xs uppercase tracking-wide mb-0.5">Total pendiente</p>
-              <p className="text-orange-800 font-semibold">
-                {totales.pendiente.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+              {formatTotales(totales.pendiente).map((t, i) => (
+                <p key={i} className="text-orange-800 font-semibold">{t}</p>
+              ))}
             </div>
             <div className="border border-red-200 bg-red-50 rounded-lg px-4 py-2 text-sm min-w-[170px]">
               <p className="text-red-600 font-medium text-xs uppercase tracking-wide mb-0.5">Total vencido</p>
-              <p className="text-red-800 font-semibold">
-                {totales.vencido.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+              {formatTotales(totales.vencido).map((t, i) => (
+                <p key={i} className="text-red-800 font-semibold">{t}</p>
+              ))}
             </div>
           </div>
         )}
