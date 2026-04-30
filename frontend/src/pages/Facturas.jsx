@@ -247,7 +247,7 @@ export default function Facturas() {
     const finalY = doc.lastAutoTable.finalY + 8
     doc.setFontSize(10)
     doc.setFont(undefined, 'bold')
-    doc.text('Resumen de totales (según filtros aplicados):', 14, finalY)
+    doc.text('Resumen de totales:', 14, finalY)
     doc.setFont(undefined, 'normal')
 
     const lineaBase = finalY + 6
