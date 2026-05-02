@@ -248,8 +248,8 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Moneda</th>
                   <th className="px-3 py-3 text-right">Subtotal ₡</th>
                   <th className="px-3 py-3 text-right">IVA ₡</th>
-                  <th className="px-3 py-3 text-right">Total ₡</th>
                   <th className="px-3 py-3 text-left">Tasa(s) IVA</th>
+                  <th className="px-3 py-3 text-right">Total ₡</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>
               </thead>
@@ -258,7 +258,7 @@ export default function CargarXML({ entidad }) {
                   <tr key={item.datos.clave} className="hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-500 text-xs max-w-[120px] truncate" title={item.archivo}>{item.archivo}</td>
                     <td className="px-3 py-2 text-gray-800 font-medium">{item.datos.emisor_nombre}</td>
-                    <td className="px-3 py-2 text-gray-600">{item.datos.fecha_emision}</td>
+                    <td className="px-3 py-2 text-gray-600">{item.datos.fecha_emision.split('-').reverse().join('-')}</td>
                     <td className="px-3 py-2">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.datos.moneda_original === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                         {item.datos.moneda_original}
@@ -267,8 +267,8 @@ export default function CargarXML({ entidad }) {
                     </td>
                     <td className="px-3 py-2 text-right text-gray-700">₡{fmt(item.datos.subtotal_crc)}</td>
                     <td className="px-3 py-2 text-right text-gray-700">₡{fmt(item.datos.impuesto_crc)}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-gray-900">₡{fmt(item.datos.total_crc)}</td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{item.datos.tasas_iva}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-gray-900">₡{fmt(item.datos.total_crc)}</td>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => quitarDePreview(item.datos.clave)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
                     </td>

@@ -238,8 +238,8 @@ export default function GenerarReporte({ entidad }) {
                 <th className="px-3 py-3 text-right">Subtotal ₡</th>
                 <th className="px-3 py-3 text-right">Desc. ₡</th>
                 <th className="px-3 py-3 text-right">IVA ₡</th>
-                <th className="px-3 py-3 text-right">Total ₡</th>
                 <th className="px-3 py-3 text-left">Tasa(s) IVA</th>
+                <th className="px-3 py-3 text-right">Total ₡</th>
                 <th className="px-3 py-3 text-center">Acciones</th>
               </tr>
             </thead>
@@ -249,7 +249,7 @@ export default function GenerarReporte({ entidad }) {
                   <td className="px-3 py-2 text-gray-500 text-xs font-mono">{c.numero_consecutivo}</td>
                   <td className="px-3 py-2 text-gray-800 font-medium">{c.emisor_nombre}</td>
                   <td className="px-3 py-2 text-gray-500 text-xs">{c.emisor_cedula}</td>
-                  <td className="px-3 py-2 text-gray-600">{formatFecha(c.fecha_emision)}</td>
+                  <td className="px-3 py-2 text-gray-600">{c.fecha_emision.split('-').reverse().join('-')}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.moneda_original === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                       {c.moneda_original}
@@ -258,8 +258,8 @@ export default function GenerarReporte({ entidad }) {
                   <td className="px-3 py-2 text-right text-gray-600">₡{fmt(c.subtotal_crc)}</td>
                   <td className="px-3 py-2 text-right text-gray-500">₡{fmt(c.descuentos_crc)}</td>
                   <td className="px-3 py-2 text-right text-gray-600">₡{fmt(c.impuesto_crc)}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-gray-900">₡{fmt(c.total_crc)}</td>
                   <td className="px-3 py-2 text-gray-500 text-xs">{c.tasas_iva}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-gray-900">₡{fmt(c.total_crc)}</td>
                   <td className="px-3 py-2 text-center">
                     <button
                       onClick={() => setConfirmEliminar(c)}
