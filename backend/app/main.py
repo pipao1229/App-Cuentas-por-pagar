@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import proveedores, facturas, pagos
+from app.routers import proveedores, facturas, pagos, comprobantes
 
 app = FastAPI(
     title="Cuentas por Pagar API",
@@ -16,9 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(proveedores.router, prefix="/api/proveedores", tags=["Proveedores"])
-app.include_router(facturas.router,   prefix="/api/facturas",   tags=["Facturas"])
-app.include_router(pagos.router,      prefix="/api/pagos",      tags=["Pagos"])
+app.include_router(proveedores.router,   prefix="/api/proveedores",   tags=["Proveedores"])
+app.include_router(facturas.router,      prefix="/api/facturas",      tags=["Facturas"])
+app.include_router(pagos.router,         prefix="/api/pagos",         tags=["Pagos"])
+app.include_router(comprobantes.router,  prefix="/api/comprobantes",  tags=["Comprobantes"])
 
 @app.get("/")
 def root():

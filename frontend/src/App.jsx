@@ -3,6 +3,7 @@ import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
 import Proveedores from './pages/Proveedores'
 import Facturas from './pages/Facturas'
+import Comprobantes from './pages/Comprobantes'
 
 export default function App() {
   return (
@@ -11,9 +12,10 @@ export default function App() {
         <Navbar />
         <main className="max-w-6xl mx-auto px-6 py-8">
           <Routes>
-            <Route path="/"            element={<Dashboard />} />
-            <Route path="/proveedores" element={<Proveedores />} />
-            <Route path="/facturas"    element={<Facturas />} />
+            <Route path="/"               element={<Dashboard />}     />
+            <Route path="/proveedores"    element={<Proveedores />}   />
+            <Route path="/facturas"       element={<Facturas />}      />
+            <Route path="/comprobantes"   element={<Comprobantes />}  />
           </Routes>
         </main>
       </div>

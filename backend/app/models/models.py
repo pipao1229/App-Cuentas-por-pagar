@@ -50,3 +50,22 @@ class Pago(Base):
     created_at         = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     factura = relationship("Factura", back_populates="pagos")
+
+class Comprobante(Base):
+    __tablename__ = "comprobantes"
+
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entidad            = Column(String(20), nullable=False)          # 'empresa' | 'ferreteria'
+    clave              = Column(String(60), nullable=False, unique=True)
+    numero_consecutivo = Column(String(30), nullable=False)
+    emisor_nombre      = Column(String(200), nullable=False)
+    emisor_cedula      = Column(String(20), nullable=False)
+    fecha_emision      = Column(Date, nullable=False)
+    moneda_original    = Column(String(3), nullable=False)           # CRC | USD
+    tipo_cambio        = Column(Numeric(12, 5), nullable=False, default=1)
+    subtotal_crc       = Column(Numeric(15, 2), nullable=False)
+    descuentos_crc     = Column(Numeric(15, 2), nullable=False, default=0)
+    impuesto_crc       = Column(Numeric(15, 2), nullable=False, default=0)
+    total_crc          = Column(Numeric(15, 2), nullable=False)
+    tasas_iva          = Column(String(100), nullable=False)         # ej: "13%, 0% Exento"
+    created_at         = Column(TIMESTAMP(timezone=True), server_default=func.now())

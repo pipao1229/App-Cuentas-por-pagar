@@ -4,6 +4,7 @@ const links = [
   { to: '/',            label: 'Dashboard'    },
   { to: '/proveedores', label: 'Proveedores'  },
   { to: '/facturas',    label: 'Facturas'     },
+  { to: '/comprobantes',    label: 'Comprobantes'     },
 ]
 
 export default function Navbar() {

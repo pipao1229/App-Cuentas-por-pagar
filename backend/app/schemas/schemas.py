@@ -74,3 +74,26 @@ class PagoOut(PagoBase):
 
     class Config:
         from_attributes = True
+
+# ── Comprobantes ──────────────────────────────
+class ComprobanteCreate(BaseModel):
+    entidad:            str                  # 'empresa' | 'ferreteria'
+    clave:              str
+    numero_consecutivo: str
+    emisor_nombre:      str
+    emisor_cedula:      str
+    fecha_emision:      date
+    moneda_original:    str
+    tipo_cambio:        float
+    subtotal_crc:       float
+    descuentos_crc:     float = 0
+    impuesto_crc:       float = 0
+    total_crc:          float
+    tasas_iva:          str
+
+class ComprobanteOut(ComprobanteCreate):
+    id:        UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
