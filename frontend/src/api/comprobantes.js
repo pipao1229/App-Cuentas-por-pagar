@@ -1,9 +1,5 @@
-import axios from 'axios'
+import api from './client'
 
-const API = import.meta.env.VITE_API_URL
-
-export const crearComprobante  = (datos)  => axios.post(`${API}/api/comprobantes/`, datos)
-
-export const getComprobantes   = (params) => axios.get(`${API}/api/comprobantes/`, { params })
-
-export const eliminarComprobante = (id)   => axios.delete(`${API}/api/comprobantes/${id}`)
+export const crearComprobante    = (datos) => api.post('/api/comprobantes/', datos)
+export const getComprobantes     = (params) => api.get('/api/comprobantes/', { params })
+export const eliminarComprobante = (id)    => api.delete(`/api/comprobantes/${id}`)
