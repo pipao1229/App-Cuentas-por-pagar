@@ -232,7 +232,6 @@ export default function GenerarReporte({ entidad }) {
               <tr>
                 <th className="px-3 py-3 text-left">Consecutivo</th>
                 <th className="px-3 py-3 text-left">Emisor</th>
-                <th className="px-3 py-3 text-left">Cédula</th>
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">Moneda</th>
                 <th className="px-3 py-3 text-right">Subtotal ₡</th>
@@ -248,7 +247,6 @@ export default function GenerarReporte({ entidad }) {
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-500 text-xs font-mono">{c.numero_consecutivo}</td>
                   <td className="px-3 py-2 text-gray-800 font-medium">{c.emisor_nombre}</td>
-                  <td className="px-3 py-2 text-gray-500 text-xs">{c.emisor_cedula}</td>
                   <td className="px-3 py-2 text-gray-600">{c.fecha_emision.split('-').reverse().join('-')}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.moneda_original === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
