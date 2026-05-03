@@ -11,6 +11,7 @@ Sistema web para gestión de cuentas por pagar y comprobantes electrónicos de H
 | Hosting backend | Render |
 
 ## Estructura del proyecto
+```
 cuentas-por-pagar/
 ├── backend/
 │   ├── app/
@@ -43,6 +44,7 @@ cuentas-por-pagar/
 └── database/
 ├── schema.sql                # Estructura de tablas
 └── seed.sql                  # Datos de prueba
+```
 
 ## Funcionalidades
 
