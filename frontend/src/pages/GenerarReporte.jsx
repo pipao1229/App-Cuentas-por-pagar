@@ -70,16 +70,15 @@ export default function GenerarReporte({ entidad }) {
     // Sheet 1: detalle de comprobantes
     const filas = comprobantes.map(c => ({
       'N° Consecutivo':  c.numero_consecutivo,
-      'Fecha':           c.fecha_emision,
+      'Fecha':           c.fecha_emision.split('-').reverse().join('-'),
       'Emisor':          c.emisor_nombre,
-      'Cédula emisor':   c.emisor_cedula,
       'Moneda original': c.moneda_original,
       'Tipo de cambio':  Number(c.tipo_cambio),
       'Subtotal (₡)':    Number(c.subtotal_crc),
       'Descuentos (₡)':  Number(c.descuentos_crc),
       'IVA (₡)':         Number(c.impuesto_crc),
-      'Total (₡)':       Number(c.total_crc),
       'Tasa(s) IVA':     c.tasas_iva,
+      'Total (₡)':       Number(c.total_crc),
     }))
     // Fila de totales
     filas.push({})
@@ -88,6 +87,7 @@ export default function GenerarReporte({ entidad }) {
       'Subtotal (₡)':   totales.subtotal,
       'Descuentos (₡)': totales.descuentos,
       'IVA (₡)':        totales.impuesto,
+      'Tasa(s) IVA':    '',
       'Total (₡)':      totales.total,
     })
 
