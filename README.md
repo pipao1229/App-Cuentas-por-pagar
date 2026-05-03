@@ -1,9 +1,7 @@
 # Cuentas por Pagar
-
 Sistema web para gestión de cuentas por pagar y comprobantes electrónicos de Hacienda Costa Rica. Permite registrar proveedores, facturas y pagos con seguimiento automático de estados y vencimientos, además de cargar y generar reportes a partir de XMLs de factura electrónica v4.4.
 
 ## Stack
-
 | Capa | Tecnología |
 |------|-----------|
 | Frontend | React + Vite + Tailwind CSS v3 |
@@ -13,12 +11,11 @@ Sistema web para gestión de cuentas por pagar y comprobantes electrónicos de H
 | Hosting backend | Render |
 
 ## Estructura del proyecto
-
-```
 cuentas-por-pagar/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py               # Punto de entrada, CORS
+│   │   ├── auth.py               # Verificación de JWT con Supabase (ES256)
 │   │   ├── database.py           # Conexión a PostgreSQL
 │   │   ├── routers/
 │   │   │   ├── proveedores.py    # CRUD proveedores
@@ -32,25 +29,20 @@ cuentas-por-pagar/
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── api/                  # Llamadas al backend (axios)
+│   │   ├── api/                  # Llamadas al backend (axios + interceptor JWT)
 │   │   ├── components/           # Navbar, Modal, Toast, EstadoBadge
-│   │   ├── pages/                # Dashboard, Proveedores, Facturas, Comprobantes
+│   │   ├── context/              # AuthContext, AuthProvider, useAuth
+│   │   ├── lib/
+│   │   │   └── supabase.js       # Cliente de Supabase
+│   │   ├── pages/                # Dashboard, Proveedores, Facturas, Comprobantes, Login
 │   │   │   ├── CargarXML.jsx     # Carga y parseo de XMLs de Hacienda
 │   │   │   └── GenerarReporte.jsx # Filtros, resumen por tasa IVA, exportación Excel
 │   │   └── utils/
 │   │       └── fecha.js          # Formateo de fechas dd-mm-yyyy
 │   └── package.json
 └── database/
-    ├── schema.sql                # Estructura de tablas
-    └── seed.sql                  # Datos de prueba
-```
-
-## Variables de entorno
-
-| Archivo | Variable | Descripción |
-|---------|----------|-------------|
-| `backend/.env` | `DATABASE_URL` | URL de conexión a Supabase (incluir `https://`) |
-| Vercel (Settings) | `VITE_API_URL` | URL del backend en Render (incluir `https://`) |
+├── schema.sql                # Estructura de tablas
+└── seed.sql                  # Datos de prueba
 
 ## Funcionalidades
 
@@ -76,8 +68,14 @@ cuentas-por-pagar/
 - Exportación a Excel con dos hojas: detalle de comprobantes + resumen por tasa IVA
 - Eliminación de comprobantes cargados por error
 
-## Deploy
+### Seguridad
+- Autenticación con Supabase Auth (email + contraseña)
+- Tokens JWT verificados en el backend con algoritmo ES256
+- Todas las rutas del frontend protegidas — redirige a login si no hay sesión activa
+- Token enviado automáticamente en cada request al backend via interceptor de axios
+- Row Level Security (RLS) activado en todas las tablas de la base de datos
 
+## Deploy
 Cualquier push a `main` redespliega automáticamente tanto Vercel (frontend) como Render (backend).
 
 ```bash
