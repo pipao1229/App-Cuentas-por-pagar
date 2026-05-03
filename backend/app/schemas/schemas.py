@@ -1,5 +1,5 @@
 from pydantic import BaseModel, condecimal
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import date, datetime
 from uuid import UUID
 
@@ -77,13 +77,13 @@ class PagoOut(PagoBase):
 
 # ── Comprobantes ──────────────────────────────
 class ComprobanteCreate(BaseModel):
-    entidad:            str                  # 'empresa' | 'ferreteria'
+    entidad:            Literal["empresa", "ferreteria"]  # rechaza cualquier otro valor
     clave:              str
     numero_consecutivo: str
     emisor_nombre:      str
     emisor_cedula:      str
     fecha_emision:      date
-    moneda_original:    str
+    moneda_original:    Literal["CRC", "USD"]
     tipo_cambio:        float
     subtotal_crc:       float
     descuentos_crc:     float = 0
