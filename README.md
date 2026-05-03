@@ -12,11 +12,6 @@ Sistema web para gestión de cuentas por pagar y comprobantes electrónicos de H
 | Hosting frontend | Vercel |
 | Hosting backend | Render |
 
-## URLs de producción
-
-- **App:** https://app-cuentas-por-pagar.vercel.app
-- **API:** https://app-cuentas-por-pagar-api.onrender.com
-
 ## Estructura del proyecto
 
 ```
