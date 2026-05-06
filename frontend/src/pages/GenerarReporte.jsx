@@ -38,7 +38,7 @@ export default function GenerarReporte({ entidad }) {
     onError: () => setToast({ mensaje: 'Error al eliminar.', tipo: 'error' })
   })
 
-  // ── Totales generales ─────────────────────────────────────────────────────
+  // ── Totales generales (las NC ya vienen negativas, se restan automáticamente) ──
   const totales = comprobantes.reduce(
     (acc, c) => ({
       subtotal:   acc.subtotal   + Number(c.subtotal_crc),
@@ -50,15 +50,10 @@ export default function GenerarReporte({ entidad }) {
   )
 
   // ── Resumen agrupado por tasa IVA ─────────────────────────────────────────
-  // Una factura puede tener varias tasas (ej: "13%, 0% Exento")
-  // La lógica la asigna completa por ahora; si el cliente necesita prorrateo exacto por línea
-  // hay que guardar más detalle en el backend.
   const resumenPorTasa = {}
   comprobantes.forEach(c => {
     const tasas = c.tasas_iva.split(',').map(t => t.trim())
-    // Si solo tiene una tasa, le asignamos todos los montos a esa tasa
-    // Si tiene varias, los totales van a "Otros cargos"
-    const tasa = tasas.length === 1 ? tasas[0] : 'Otros cargos'
+    const tasa  = tasas.length === 1 ? tasas[0] : 'Otros cargos'
     if (!resumenPorTasa[tasa]) resumenPorTasa[tasa] = { subtotal: 0, impuesto: 0, total: 0 }
     resumenPorTasa[tasa].subtotal  += Number(c.subtotal_crc)
     resumenPorTasa[tasa].impuesto  += Number(c.impuesto_crc)
@@ -69,6 +64,7 @@ export default function GenerarReporte({ entidad }) {
   function exportarExcel() {
     // Sheet 1: detalle de comprobantes
     const filas = comprobantes.map(c => ({
+      'Tipo':            c.tipo_comprobante ?? 'Factura',
       'N° Consecutivo':  c.numero_consecutivo,
       'Fecha':           c.fecha_emision.split('-').reverse().join('-'),
       'Emisor':          c.emisor_nombre,
@@ -80,26 +76,23 @@ export default function GenerarReporte({ entidad }) {
       'Tasa(s) IVA':     c.tasas_iva,
       'Total (₡)':       Number(c.total_crc),
     }))
-    // Fila de totales
     filas.push({})
     filas.push({
-      'N° Consecutivo': 'TOTALES',
+      'Tipo':           'TOTALES',
       'Subtotal (₡)':   totales.subtotal,
       'Descuentos (₡)': totales.descuentos,
       'IVA (₡)':        totales.impuesto,
-      'Tasa(s) IVA':    '',
       'Total (₡)':      totales.total,
     })
 
-    // Sheet 2: resumen por tasa IVA (estilo Hacienda)
+    // Sheet 2: resumen por tasa IVA
     const filasResumen = TASAS_ORDEN.map(tasa => ({
-      'Tarifa IVA':     tasa,
-      'SubTotal (₡)':   resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].subtotal.toFixed(2))  : '',
-      'Impuesto (₡)':   resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].impuesto.toFixed(2))  : '',
-      'IVA Devuelto':   '-',
-      'Total (₡)':      resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].total.toFixed(2))     : '',
+      'Tarifa IVA':   tasa,
+      'SubTotal (₡)': resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].subtotal.toFixed(2)) : '',
+      'Impuesto (₡)': resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].impuesto.toFixed(2)) : '',
+      'IVA Devuelto': '-',
+      'Total (₡)':    resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].total.toFixed(2))    : '',
     }))
-    // Filas extra de totales del resumen
     filasResumen.push({
       'Tarifa IVA':   'Totales',
       'SubTotal (₡)': Number(totales.subtotal.toFixed(2)),
@@ -108,9 +101,9 @@ export default function GenerarReporte({ entidad }) {
       'Total (₡)':    Number(totales.total.toFixed(2)),
     })
 
-    const wsDetalle  = XLSX.utils.json_to_sheet(filas)
-    const wsResumen  = XLSX.utils.json_to_sheet(filasResumen)
-    const wb         = XLSX.utils.book_new()
+    const wsDetalle = XLSX.utils.json_to_sheet(filas)
+    const wsResumen = XLSX.utils.json_to_sheet(filasResumen)
+    const wb        = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, wsDetalle, 'Comprobantes')
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen por tasa IVA')
 
@@ -166,10 +159,10 @@ export default function GenerarReporte({ entidad }) {
       {!isLoading && comprobantes.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Subtotal', valor: totales.subtotal,   color: 'blue'   },
-            { label: 'Descuentos', valor: totales.descuentos, color: 'gray' },
-            { label: 'IVA total', valor: totales.impuesto,  color: 'orange' },
-            { label: 'Total',     valor: totales.total,     color: 'green'  },
+            { label: 'Subtotal',   valor: totales.subtotal,   color: 'blue'   },
+            { label: 'Descuentos', valor: totales.descuentos, color: 'gray'   },
+            { label: 'IVA total',  valor: totales.impuesto,   color: 'orange' },
+            { label: 'Total',      valor: totales.total,      color: 'green'  },
           ].map(({ label, valor, color }) => (
             <div key={label} className={`border border-${color}-200 bg-${color}-50 rounded-xl px-4 py-3`}>
               <p className={`text-${color}-600 font-medium text-xs uppercase tracking-wide mb-0.5`}>{label}</p>
@@ -203,7 +196,6 @@ export default function GenerarReporte({ entidad }) {
                   <td className="px-4 py-2 text-right font-semibold text-gray-800">₡{fmt(resumenPorTasa[tasa].total)}</td>
                 </tr>
               ))}
-              {/* Totales */}
               <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
                 <td className="px-4 py-2 text-gray-800">Totales</td>
                 <td className="px-4 py-2 text-right text-gray-800">₡{fmt(totales.subtotal)}</td>
@@ -219,7 +211,9 @@ export default function GenerarReporte({ entidad }) {
       {isLoading ? (
         <p className="text-gray-500 text-sm">Cargando comprobantes...</p>
       ) : comprobantes.length === 0 ? (
-        <p className="text-gray-400 text-sm text-center py-8">No hay comprobantes cargados{(fechaDesde || fechaHasta) ? ' para ese rango de fechas' : ''}.</p>
+        <p className="text-gray-400 text-sm text-center py-8">
+          No hay comprobantes cargados{(fechaDesde || fechaHasta) ? ' para ese rango de fechas' : ''}.
+        </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
@@ -231,6 +225,7 @@ export default function GenerarReporte({ entidad }) {
             <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
               <tr>
                 <th className="px-3 py-3 text-left">Consecutivo</th>
+                <th className="px-3 py-3 text-left">Tipo</th>
                 <th className="px-3 py-3 text-left">Emisor</th>
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">Moneda</th>
@@ -246,6 +241,13 @@ export default function GenerarReporte({ entidad }) {
               {comprobantes.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-500 text-xs font-mono">{c.numero_consecutivo}</td>
+                  <td className="px-3 py-2">
+                    {c.tipo_comprobante === 'Nota de Crédito' ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">NC</span>
+                    ) : (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">FE</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-gray-800 font-medium">{c.emisor_nombre}</td>
                   <td className="px-3 py-2 text-gray-600">{c.fecha_emision.split('-').reverse().join('-')}</td>
                   <td className="px-3 py-2">
@@ -253,11 +255,17 @@ export default function GenerarReporte({ entidad }) {
                       {c.moneda_original}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-right text-gray-600">₡{fmt(c.subtotal_crc)}</td>
+                  <td className={`px-3 py-2 text-right ${Number(c.subtotal_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    ₡{fmt(c.subtotal_crc)}
+                  </td>
                   <td className="px-3 py-2 text-right text-gray-500">₡{fmt(c.descuentos_crc)}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">₡{fmt(c.impuesto_crc)}</td>
+                  <td className={`px-3 py-2 text-right ${Number(c.impuesto_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    ₡{fmt(c.impuesto_crc)}
+                  </td>
                   <td className="px-3 py-2 text-gray-500 text-xs">{c.tasas_iva}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-gray-900">₡{fmt(c.total_crc)}</td>
+                  <td className={`px-3 py-2 text-right font-semibold ${Number(c.total_crc) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    ₡{fmt(c.total_crc)}
+                  </td>
                   <td className="px-3 py-2 text-center">
                     <button
                       onClick={() => setConfirmEliminar(c)}

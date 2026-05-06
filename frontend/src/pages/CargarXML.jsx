@@ -14,7 +14,13 @@ const TASA_LABEL = {
   '07': '1% Canasta básica',
   '08': '13%',
   '09': '4% Reducida',
-  '10': '0% No sujeto',   // combustibles y similares
+  '10': '0% No sujeto',
+}
+
+// ── Tipos de documento soportados ──────────────────────────────────────────
+const TIPOS_DOCUMENTO = {
+  FacturaElectronica:     { tipo: 'Factura',         factor:  1 },
+  NotaCreditoElectronica: { tipo: 'Nota de Crédito', factor: -1 },
 }
 
 function getText(doc, tag) {
@@ -30,22 +36,23 @@ function parsearXML(texto, nombreArchivo) {
   const parser = new DOMParser()
   const doc    = parser.parseFromString(texto, 'application/xml')
 
-  // Detectar tipo de documento
   const raiz = doc.documentElement.localName
+
   if (raiz === 'MensajeHacienda') {
     return { tipo: 'mensaje', archivo: nombreArchivo }
   }
-  if (raiz !== 'FacturaElectronica') {
+  if (!TIPOS_DOCUMENTO[raiz]) {
     return { tipo: 'desconocido', archivo: nombreArchivo }
   }
 
+  const { tipo: tipoComprobante, factor } = TIPOS_DOCUMENTO[raiz]
+
   // Datos principales
-  const clave              = getText(doc, 'Clave')
-  const numeroConsecutivo  = getText(doc, 'NumeroConsecutivo')
-  const fechaEmision       = getText(doc, 'FechaEmision').substring(0, 10) // YYYY-MM-DD
-  const emisorNombre       = getText(doc, 'Nombre')   // primer <Nombre> = Emisor
-  const emisorCedula       = (() => {
-    // Identificacion > Numero dentro de Emisor
+  const clave             = getText(doc, 'Clave')
+  const numeroConsecutivo = getText(doc, 'NumeroConsecutivo')
+  const fechaEmision      = getText(doc, 'FechaEmision').substring(0, 10) // YYYY-MM-DD
+  const emisorNombre      = getText(doc, 'Nombre') // primer <Nombre> = Emisor
+  const emisorCedula      = (() => {
     const emisorEl = doc.getElementsByTagNameNS('*', 'Emisor')[0]
     return emisorEl ? emisorEl.getElementsByTagNameNS('*', 'Numero')[0]?.textContent.trim() : ''
   })()
@@ -54,27 +61,26 @@ function parsearXML(texto, nombreArchivo) {
   const monedaOriginal = getText(doc, 'CodigoMoneda') || 'CRC'
   const tipoCambio     = parseFloat(getText(doc, 'TipoCambio') || '1') || 1
 
-  // Totales del resumen (en moneda original)
-  const subtotalOrig    = parseFloat(getText(doc, 'TotalVentaNeta')   || '0')
-  const descuentosOrig  = parseFloat(getText(doc, 'TotalDescuentos')  || '0')
-  const impuestoOrig    = parseFloat(getText(doc, 'TotalImpuesto')    || '0')
-  const totalOrig       = parseFloat(getText(doc, 'TotalComprobante') || '0')
+  // Totales del resumen en moneda original — factor convierte NC a negativos
+  const subtotalOrig    = parseFloat(getText(doc, 'TotalVentaNeta')   || '0') * factor
+  const descuentosOrig  = parseFloat(getText(doc, 'TotalDescuentos')  || '0') * factor
+  const impuestoOrig    = parseFloat(getText(doc, 'TotalImpuesto')    || '0') * factor
+  const totalOrig       = parseFloat(getText(doc, 'TotalComprobante') || '0') * factor
 
-  // Convertir a CRC
-  const tc              = monedaOriginal === 'USD' ? tipoCambio : 1
-  const subtotalCRC     = subtotalOrig   * tc
-  const descuentosCRC   = descuentosOrig * tc
-  const impuestoCRC     = impuestoOrig   * tc
-  const totalCRC        = totalOrig      * tc
+  // Convertir a CRC usando tipo de cambio del XML (CRC × 1, USD × tipoCambio)
+  const tc            = monedaOriginal === 'USD' ? tipoCambio : 1
+  const subtotalCRC   = subtotalOrig  * tc
+  const descuentosCRC = descuentosOrig * tc
+  const impuestoCRC   = impuestoOrig  * tc
+  const totalCRC      = totalOrig     * tc
 
   // Tasas IVA — puede haber varias líneas con distintas tarifas
   const lineas   = getAll(doc, 'LineaDetalle')
   const tasasSet = new Set()
   lineas.forEach(linea => {
     const codigoTarifa = linea.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim()
-    if (codigoTarifa) tasasSet.add(TASA_LABEL[codigoTarifa] ?? `${codigoTarifa}`)
+    if (codigoTarifa) tasasSet.add(TASA_LABEL[codigoTarifa] ?? codigoTarifa)
   })
-  // También revisar TotalDesgloseImpuesto por si no hay líneas
   getAll(doc, 'TotalDesgloseImpuesto').forEach(td => {
     const ct = td.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim()
     if (ct) tasasSet.add(TASA_LABEL[ct] ?? ct)
@@ -82,8 +88,9 @@ function parsearXML(texto, nombreArchivo) {
   const tasasIVA = tasasSet.size ? [...tasasSet].join(', ') : '—'
 
   return {
-    tipo: 'factura',
+    tipo: 'factura',     // para el flujo de preview
     archivo: nombreArchivo,
+    tipoComprobante,     // 'Factura' | 'Nota de Crédito'
     datos: {
       clave,
       numero_consecutivo: numeroConsecutivo,
@@ -92,11 +99,12 @@ function parsearXML(texto, nombreArchivo) {
       fecha_emision:      fechaEmision,
       moneda_original:    monedaOriginal,
       tipo_cambio:        tipoCambio,
-      subtotal_crc:       Math.round(subtotalCRC   * 100) / 100,
-      descuentos_crc:     Math.round(descuentosCRC * 100) / 100,
-      impuesto_crc:       Math.round(impuestoCRC   * 100) / 100,
-      total_crc:          Math.round(totalCRC      * 100) / 100,
+      subtotal_crc:       subtotalCRC,
+      descuentos_crc:     descuentosCRC,
+      impuesto_crc:       impuestoCRC,
+      total_crc:          totalCRC,
       tasas_iva:          tasasIVA,
+      tipo_comprobante:   tipoComprobante,
     }
   }
 }
@@ -104,24 +112,24 @@ function parsearXML(texto, nombreArchivo) {
 const fmt = (n) => Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function CargarXML({ entidad }) {
-  const queryClient    = useQueryClient()
-  const inputRef       = useRef()
-  const [preview, setPreview]   = useState([])   // facturas parseadas listas para guardar
-  const [omitidos, setOmitidos] = useState([])   // archivos omitidos con motivo
-  const [toast, setToast]       = useState(null)
+  const queryClient      = useQueryClient()
+  const inputRef         = useRef()
+  const [preview, setPreview]     = useState([])
+  const [omitidos, setOmitidos]   = useState([])
+  const [toast, setToast]         = useState(null)
   const [guardando, setGuardando] = useState(false)
 
   // ── Procesar archivos seleccionados ─────────────────────────────────────
   async function procesarArchivos(archivos) {
-    const resultados  = []
-    const rechazados  = []
+    const resultados = []
+    const rechazados = []
 
     for (const archivo of archivos) {
       if (!archivo.name.toLowerCase().endsWith('.xml')) {
         rechazados.push({ archivo: archivo.name, motivo: 'No es un archivo XML.' })
         continue
       }
-      const texto    = await archivo.text()
+      const texto     = await archivo.text()
       const resultado = parsearXML(texto, archivo.name)
 
       if (resultado.tipo === 'mensaje') {
@@ -134,7 +142,6 @@ export default function CargarXML({ entidad }) {
     }
 
     setPreview(prev => {
-      // Evitar duplicados en preview por clave
       const claves = new Set(prev.map(r => r.datos.clave))
       const nuevos  = resultados.filter(r => !claves.has(r.datos.clave))
       return [...prev, ...nuevos]
@@ -160,9 +167,9 @@ export default function CargarXML({ entidad }) {
   async function guardarTodos() {
     if (!preview.length) return
     setGuardando(true)
-    let guardados = 0
+    let guardados  = 0
     let duplicados = 0
-    let errores = 0
+    let errores    = 0
 
     for (const item of preview) {
       try {
@@ -201,7 +208,7 @@ export default function CargarXML({ entidad }) {
         className="border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl p-10 text-center cursor-pointer hover:bg-blue-100 transition-colors"
       >
         <p className="text-blue-700 font-medium text-sm">Arrastrá los archivos XML aquí o hacé clic para seleccionar</p>
-        <p className="text-blue-500 text-xs mt-1">Podés subir varios a la vez</p>
+        <p className="text-blue-500 text-xs mt-1">Facturas electrónicas y notas de crédito · Podés subir varios a la vez</p>
         <input ref={inputRef} type="file" accept=".xml" multiple className="hidden" onChange={onInputChange} />
       </div>
 
@@ -217,12 +224,12 @@ export default function CargarXML({ entidad }) {
         </div>
       )}
 
-      {/* Preview de facturas listas para guardar */}
+      {/* Preview de comprobantes listos para guardar */}
       {preview.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-gray-700 font-medium text-sm">
-              {preview.length} factura{preview.length > 1 ? 's' : ''} lista{preview.length > 1 ? 's' : ''} para guardar
+              {preview.length} comprobante{preview.length > 1 ? 's' : ''} listo{preview.length > 1 ? 's' : ''} para guardar
             </p>
             <div className="flex gap-3">
               <button onClick={limpiarTodo} className="text-sm text-gray-500 hover:text-gray-700 underline">
@@ -233,7 +240,7 @@ export default function CargarXML({ entidad }) {
                 disabled={guardando}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {guardando ? 'Guardando...' : `Guardar ${preview.length > 1 ? 'todas' : ''}`}
+                {guardando ? 'Guardando...' : `Guardar ${preview.length > 1 ? 'todos' : ''}`}
               </button>
             </div>
           </div>
@@ -243,6 +250,7 @@ export default function CargarXML({ entidad }) {
               <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                 <tr>
                   <th className="px-3 py-3 text-left">Archivo</th>
+                  <th className="px-3 py-3 text-left">Tipo</th>
                   <th className="px-3 py-3 text-left">Emisor</th>
                   <th className="px-3 py-3 text-left">Fecha</th>
                   <th className="px-3 py-3 text-left">Moneda</th>
@@ -257,6 +265,13 @@ export default function CargarXML({ entidad }) {
                 {preview.map(item => (
                   <tr key={item.datos.clave} className="hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-500 text-xs max-w-[120px] truncate" title={item.archivo}>{item.archivo}</td>
+                    <td className="px-3 py-2">
+                      {item.tipoComprobante === 'Nota de Crédito' ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">NC</span>
+                      ) : (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">FE</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-gray-800 font-medium">{item.datos.emisor_nombre}</td>
                     <td className="px-3 py-2 text-gray-600">{item.datos.fecha_emision.split('-').reverse().join('-')}</td>
                     <td className="px-3 py-2">
@@ -265,10 +280,16 @@ export default function CargarXML({ entidad }) {
                         {item.datos.moneda_original === 'USD' && <span className="ml-1 text-gray-400">×{item.datos.tipo_cambio}</span>}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-700">₡{fmt(item.datos.subtotal_crc)}</td>
-                    <td className="px-3 py-2 text-right text-gray-700">₡{fmt(item.datos.impuesto_crc)}</td>
+                    <td className={`px-3 py-2 text-right ${item.datos.subtotal_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                      ₡{fmt(item.datos.subtotal_crc)}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${item.datos.impuesto_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                      ₡{fmt(item.datos.impuesto_crc)}
+                    </td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{item.datos.tasas_iva}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-gray-900">₡{fmt(item.datos.total_crc)}</td>
+                    <td className={`px-3 py-2 text-right font-semibold ${item.datos.total_crc < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      ₡{fmt(item.datos.total_crc)}
+                    </td>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => quitarDePreview(item.datos.clave)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
                     </td>

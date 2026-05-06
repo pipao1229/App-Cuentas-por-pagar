@@ -68,4 +68,5 @@ class Comprobante(Base):
     impuesto_crc       = Column(Numeric(15, 2), nullable=False, default=0)
     total_crc          = Column(Numeric(15, 2), nullable=False)
     tasas_iva          = Column(String(100), nullable=False)         # ej: "13%, 0% Exento"
+    tipo_comprobante   = Column(String(20), nullable=False, default="Factura")
     created_at         = Column(TIMESTAMP(timezone=True), server_default=func.now())

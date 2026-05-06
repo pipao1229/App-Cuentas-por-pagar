@@ -90,6 +90,7 @@ class ComprobanteCreate(BaseModel):
     impuesto_crc:       float = 0
     total_crc:          float
     tasas_iva:          str
+    tipo_comprobante:   str = "Factura"
 
 class ComprobanteOut(ComprobanteCreate):
     id:        UUID
