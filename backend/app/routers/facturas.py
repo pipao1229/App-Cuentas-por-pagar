@@ -33,17 +33,20 @@ def listar_facturas(
     query = db.query(Factura).options(joinedload(Factura.proveedor))
     if proveedor_id:
         query = query.filter(Factura.proveedor_id == proveedor_id)
-    
-    facturas = query.order_by(Factura.fecha_vencimiento.asc()).all()
-    
+
+    # Ordenar por fecha_factura ASC, luego numero_factura ASC
+    facturas = query.order_by(Factura.fecha_factura.asc(), Factura.numero_factura.asc()).all()
+
     # Actualizar estado de cada factura si cambió
     for f in facturas:
         actualizar_estado(f, db, hoy)
-    
-    # Aplicar filtro de estado después de actualizar
-    if estado:
+
+    # Filtro "por_pagar" agrupa pendiente + vencida
+    if estado == "por_pagar":
+        facturas = [f for f in facturas if f.estado in ("pendiente", "vencida")]
+    elif estado:
         facturas = [f for f in facturas if f.estado == estado]
-    
+
     return facturas
 
 @router.post("/", response_model=FacturaOut)
@@ -72,7 +75,6 @@ def resumen_dashboard(db: Session = Depends(get_db)):
     hoy = date.today()
     proximos_dias = 7
 
-    # Actualizar todos los estados primero
     todas = db.query(Factura).filter(Factura.estado != "pagada").all()
     for f in todas:
         actualizar_estado(f, db, hoy)
@@ -105,26 +107,25 @@ def actualizar_factura(factura_id: str, datos: FacturaCreate, db: Session = Depe
     factura = db.query(Factura).options(joinedload(Factura.proveedor)).filter(Factura.id == factura_id).first()
     if not factura:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
-    
+
     proveedor = db.query(Proveedor).filter(Proveedor.id == str(datos.proveedor_id)).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
 
     from datetime import timedelta
     fecha_vencimiento = datos.fecha_factura + timedelta(days=proveedor.plazo_dias)
-    
-    # Recalcular saldo si cambió el monto
+
     from decimal import Decimal
     diferencia = Decimal(str(datos.monto_original)) - factura.monto_original
     nuevo_saldo = factura.saldo_pendiente + diferencia
     if nuevo_saldo < 0:
         nuevo_saldo = 0
 
-    factura.proveedor_id = datos.proveedor_id
-    factura.numero_factura = datos.numero_factura
-    factura.fecha_factura = datos.fecha_factura
+    factura.proveedor_id    = datos.proveedor_id
+    factura.numero_factura  = datos.numero_factura
+    factura.fecha_factura   = datos.fecha_factura
     factura.fecha_vencimiento = fecha_vencimiento
-    factura.monto_original = datos.monto_original
+    factura.monto_original  = datos.monto_original
     factura.saldo_pendiente = nuevo_saldo
 
     db.commit()

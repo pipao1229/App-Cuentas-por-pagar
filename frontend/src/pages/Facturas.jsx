@@ -11,15 +11,20 @@ import Toast from '../components/Toast'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
- 
+
 const formFacturaVacio = {
   proveedor_id: '', numero_factura: '', fecha_factura: '', monto_original: ''
 }
- 
+
 const formPagoVacio = {
   fecha_pago: '', monto_pagado: '', numero_comprobante: '', notas: ''
 }
- 
+
+// ── Cambio 2: símbolo seguro para jsPDF (no soporta ₡) ──────────────────────
+function simboloPDF(moneda) {
+  return moneda === 'USD' ? '$' : 'CRC'
+}
+
 export default function Facturas() {
   const queryClient = useQueryClient()
   const [mostrarFormFactura, setMostrarFormFactura] = useState(false)
@@ -37,7 +42,7 @@ export default function Facturas() {
   const cerrarToast = useCallback(() => setToast(null), [])
   const location = useLocation()
   const yaAbrio = useRef(false)
- 
+
   const { data: facturas = [], isLoading } = useQuery({
     queryKey: ['facturas', filtroEstado, filtroProveedor],
     queryFn: () => getFacturas({
@@ -45,26 +50,25 @@ export default function Facturas() {
       ...(filtroProveedor && { proveedor_id: filtroProveedor })
     }).then(r => r.data)
   })
- 
+
   const { data: proveedores = [] } = useQuery({
     queryKey: ['proveedores'],
     queryFn: () => getProveedores().then(r => r.data)
   })
- 
+
   const { data: pagosFactura = [] } = useQuery({
     queryKey: ['pagos', facturaSeleccionada?.id],
     queryFn: () => getPagosPorFactura(facturaSeleccionada.id).then(r => r.data),
     enabled: !!facturaSeleccionada && mostrarPagos
   })
- 
-  // ── Totales calculados desde las facturas visibles ──────────────────────────
-  // Se agrupan por moneda (CRC y USD) para mostrar símbolo correcto.
+
+  // ── Totales calculados desde las facturas visibles ───────────────────────
   const totales = facturas.reduce(
     (acc, f) => {
       const moneda = f.proveedor.moneda === 'USD' ? 'USD' : 'CRC'
       const saldo = Number(f.saldo_pendiente)
       if (f.estado === 'vencida') {
-        acc.vencido[moneda]  = (acc.vencido[moneda]  || 0) + saldo
+        acc.vencido[moneda]   = (acc.vencido[moneda]   || 0) + saldo
         acc.pendiente[moneda] = (acc.pendiente[moneda] || 0) + saldo
       } else if (f.estado === 'pendiente') {
         acc.pendiente[moneda] = (acc.pendiente[moneda] || 0) + saldo
@@ -80,7 +84,15 @@ export default function Facturas() {
     if (totalesPorMoneda.USD) partes.push(`$${totalesPorMoneda.USD.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
     return partes.length ? partes : ['0,00']
   }
- 
+
+  // ── Versión de formatTotales para PDF (sin ₡) ────────────────────────────
+  function formatTotalesPDF(totalesPorMoneda) {
+    const partes = []
+    if (totalesPorMoneda.CRC) partes.push(`CRC ${totalesPorMoneda.CRC.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+    if (totalesPorMoneda.USD) partes.push(`$${totalesPorMoneda.USD.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+    return partes.length ? partes.join('  /  ') : '0,00'
+  }
+
   const crearFact = useMutation({
     mutationFn: crearFactura,
     onSuccess: () => {
@@ -93,7 +105,7 @@ export default function Facturas() {
     },
     onError: (e) => setError(e.response?.data?.detail ?? 'Error al crear la factura.')
   })
- 
+
   const eliminar = useMutation({
     mutationFn: eliminarFactura,
     onSuccess: () => {
@@ -104,7 +116,7 @@ export default function Facturas() {
     },
     onError: () => setToast({ mensaje: 'Error al eliminar la factura.', tipo: 'error' })
   })
- 
+
   const actualizarFact = useMutation({
     mutationFn: ({ id, datos }) => actualizarFactura(id, datos),
     onSuccess: () => {
@@ -117,7 +129,7 @@ export default function Facturas() {
     },
     onError: (e) => setError(e.response?.data?.detail ?? 'Error al actualizar la factura.')
   })
- 
+
   const registrarPagoMutation = useMutation({
     mutationFn: registrarPago,
     onSuccess: () => {
@@ -131,7 +143,7 @@ export default function Facturas() {
     },
     onError: (e) => setError(e.response?.data?.detail ?? 'Error al registrar el pago.')
   })
- 
+
   function handleSubmitFactura(e) {
     e.preventDefault()
     if (!formFactura.proveedor_id) return setError('Selecciona un proveedor.')
@@ -145,7 +157,7 @@ export default function Facturas() {
       monto_original: Number(formFactura.monto_original)
     })
   }
- 
+
   function handleSubmitPago(e) {
     e.preventDefault()
     if (!formPago.fecha_pago) return setError('La fecha de pago es obligatoria.')
@@ -153,14 +165,14 @@ export default function Facturas() {
       return setError('El monto debe ser mayor a 0.')
     setError('')
     registrarPagoMutation.mutate({
-      factura_id: facturaSeleccionada.id,
-      fecha_pago: formPago.fecha_pago,
-      monto_pagado: Number(formPago.monto_pagado),
+      factura_id:         facturaSeleccionada.id,
+      fecha_pago:         formPago.fecha_pago,
+      monto_pagado:       Number(formPago.monto_pagado),
       numero_comprobante: formPago.numero_comprobante,
-      notas: formPago.notas
+      notas:              formPago.notas
     })
   }
- 
+
   function handleSubmitEditar(e) {
     e.preventDefault()
     if (!formEditar.proveedor_id) return setError('Selecciona un proveedor.')
@@ -170,31 +182,31 @@ export default function Facturas() {
       return setError('El monto debe ser mayor a 0.')
     setError('')
     actualizarFact.mutate({
-      id: editandoFactura.id,
+      id:   editandoFactura.id,
       datos: { ...formEditar, monto_original: Number(formEditar.monto_original) }
     })
   }
- 
+
   function abrirPagos(factura) {
     setFacturaSeleccionada(factura)
     setMostrarPagos(true)
     setError('')
     setFormPago(formPagoVacio)
   }
- 
+
   function abrirEditar(f) {
     setFormEditar({
-      proveedor_id: f.proveedor_id,
+      proveedor_id:   f.proveedor_id,
       numero_factura: f.numero_factura,
-      fecha_factura: f.fecha_factura,
+      fecha_factura:  f.fecha_factura,
       monto_original: f.monto_original
     })
     setEditandoFactura(f)
     setError('')
   }
- 
+
   const proveedorSeleccionado = proveedores.find(p => p.id === formFactura.proveedor_id)
- 
+
   useEffect(() => {
     if (yaAbrio.current) return
     if (location.state?.abrirPago && facturas.length > 0) {
@@ -205,17 +217,19 @@ export default function Facturas() {
       }
     }
   }, [location.state, facturas])
- 
+
+  // ── Cambio 2: PDF con "CRC" en vez de "₡" ───────────────────────────────
   function exportarPDF() {
     const doc = new jsPDF()
     doc.setFontSize(16)
-    doc.text('Cuentas por Pagar — Facturas', 14, 15)
+    doc.text('Cuentas por Pagar - Facturas', 14, 15)
     doc.setFontSize(10)
     doc.text(`Generado: ${new Date().toLocaleDateString('es-CR')}`, 14, 22)
 
-    // Filtros activos como subtítulo
     const partesFiltro = []
-    if (filtroEstado) partesFiltro.push(`Estado: ${filtroEstado}`)
+    // ── Cambio 3: mostrar "Por pagar" en el subtítulo del PDF ──
+    if (filtroEstado === 'por_pagar') partesFiltro.push('Estado: Por pagar (pendiente + vencida)')
+    else if (filtroEstado) partesFiltro.push(`Estado: ${filtroEstado}`)
     if (filtroProveedor) {
       const prov = proveedores.find(p => p.id === filtroProveedor)
       if (prov) partesFiltro.push(`Proveedor: ${prov.nombre}`)
@@ -226,24 +240,24 @@ export default function Facturas() {
 
     autoTable(doc, {
       startY,
-      head: [['Proveedor', 'N° Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
+      head: [['Proveedor', 'N Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
       body: facturas.map(f => {
-        const simbolo = f.proveedor.moneda === 'USD' ? '$' : '₡'
+        // ── Cambio 2: usar simboloPDF para evitar el caracter roto ──
+        const sim = simboloPDF(f.proveedor.moneda)
         return [
           f.proveedor.nombre,
           f.numero_factura,
           formatFecha(f.fecha_factura),
           formatFecha(f.fecha_vencimiento),
-          `${simbolo}${Number(f.monto_original).toLocaleString('es-CR')}`,
-          `${simbolo}${Number(f.saldo_pendiente).toLocaleString('es-CR')}`,
+          `${sim} ${Number(f.monto_original).toLocaleString('es-CR')}`,
+          `${sim} ${Number(f.saldo_pendiente).toLocaleString('es-CR')}`,
           f.estado
         ]
       }),
-      styles: { fontSize: 9 },
+      styles:     { fontSize: 9 },
       headStyles: { fillColor: [37, 99, 235] }
     })
 
-    // Totales al final del PDF
     const finalY = doc.lastAutoTable.finalY + 8
     doc.setFontSize(10)
     doc.setFont(undefined, 'bold')
@@ -251,42 +265,39 @@ export default function Facturas() {
     doc.setFont(undefined, 'normal')
 
     const lineaBase = finalY + 6
-    const pendientesTexto = formatTotales(totales.pendiente).join('  /  ')
-    const vencidosTexto   = formatTotales(totales.vencido).join('  /  ')
-    doc.text(`Total pendiente: ${pendientesTexto}`, 14, lineaBase)
-    doc.text(`Total vencido:   ${vencidosTexto}`,   14, lineaBase + 6)
+    doc.text(`Total pendiente: ${formatTotalesPDF(totales.pendiente)}`, 14, lineaBase)
+    doc.text(`Total vencido:   ${formatTotalesPDF(totales.vencido)}`,   14, lineaBase + 6)
 
     doc.save('facturas.pdf')
   }
- 
+
   function exportarExcel() {
     const filas = facturas.map(f => ({
-      Proveedor: f.proveedor.nombre,
-      Moneda: f.proveedor.moneda,
-      'N° Factura': f.numero_factura,
-      Fecha: formatFecha(f.fecha_factura),
-      Vencimiento: formatFecha(f.fecha_vencimiento),
-      'Monto original': Number(f.monto_original),
+      Proveedor:         f.proveedor.nombre,
+      Moneda:            f.proveedor.moneda,
+      'N° Factura':      f.numero_factura,
+      Fecha:             formatFecha(f.fecha_factura),
+      Vencimiento:       formatFecha(f.fecha_vencimiento),
+      'Monto original':  Number(f.monto_original),
       'Saldo pendiente': Number(f.saldo_pendiente),
-      Estado: f.estado
+      Estado:            f.estado
     }))
 
-    // Filas de totales separadas por moneda
-    filas.push({})  // fila vacía como separador
+    filas.push({})
     const monedasUsadas = [...new Set(facturas.map(f => f.proveedor.moneda))]
     monedasUsadas.forEach(moneda => {
       const simbolo = moneda === 'USD' ? '$' : '₡'
       const pendM = totales.pendiente[moneda] || 0
       const vencM = totales.vencido[moneda]   || 0
       filas.push({
-        Proveedor: `TOTAL ${moneda}`,
-        Moneda: moneda,
-        'N° Factura': '',
-        Fecha: '',
-        Vencimiento: '',
-        'Monto original': '',
+        Proveedor:         `TOTAL ${moneda}`,
+        Moneda:            moneda,
+        'N° Factura':      '',
+        Fecha:             '',
+        Vencimiento:       '',
+        'Monto original':  '',
         'Saldo pendiente': `${simbolo}${pendM.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pendiente  |  ${simbolo}${vencM.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} vencido`,
-        Estado: ''
+        Estado:            ''
       })
     })
 
@@ -295,7 +306,7 @@ export default function Facturas() {
     XLSX.utils.book_append_sheet(wb, ws, 'Facturas')
     XLSX.writeFile(wb, 'facturas.xlsx')
   }
- 
+
   return (
     <div className="space-y-6">
       {/* Encabezado */}
@@ -322,20 +333,22 @@ export default function Facturas() {
           </button>
         </div>
       </div>
- 
+
       {/* Filtros + Tabla resumen */}
       <div className="flex items-center gap-4 flex-wrap">
+        {/* ── Cambio 3: opción "Por pagar" en el selector de estado ── */}
         <select
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={filtroEstado}
           onChange={e => setFiltroEstado(e.target.value)}
         >
           <option value="">Todos los estados</option>
+          <option value="por_pagar">Por pagar (pendiente + vencida)</option>
           <option value="pendiente">Pendiente</option>
-          <option value="pagada">Pagada</option>
           <option value="vencida">Vencida</option>
+          <option value="pagada">Pagada</option>
         </select>
- 
+
         <select
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={filtroProveedor}
@@ -346,7 +359,7 @@ export default function Facturas() {
             <option key={p.id} value={p.id}>{p.nombre}</option>
           ))}
         </select>
- 
+
         {(filtroEstado || filtroProveedor) && (
           <button
             onClick={() => { setFiltroEstado(''); setFiltroProveedor('') }}
@@ -355,7 +368,7 @@ export default function Facturas() {
             Limpiar filtros
           </button>
         )}
- 
+
         {/* Tabla resumen de totales */}
         {!isLoading && (
           <div className="ml-auto flex gap-3">
@@ -374,7 +387,7 @@ export default function Facturas() {
           </div>
         )}
       </div>
- 
+
       {/* Modal nueva factura */}
       {mostrarFormFactura && (
         <Modal titulo="Nueva factura" onClose={() => { setMostrarFormFactura(false); setFormFactura(formFacturaVacio); setError('') }}>
@@ -456,7 +469,7 @@ export default function Facturas() {
           </form>
         </Modal>
       )}
- 
+
       {/* Modal pagos */}
       {mostrarPagos && facturaSeleccionada && (
         <Modal titulo={`Pagos — ${facturaSeleccionada.numero_factura}`} onClose={() => { setMostrarPagos(false); setError('') }}>
@@ -468,9 +481,9 @@ export default function Facturas() {
               </span>
             </p>
           </div>
- 
+
           {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
- 
+
           {facturaSeleccionada.estado !== 'pagada' && (
             <form onSubmit={handleSubmitPago} className="grid grid-cols-2 gap-4 border-t pt-4">
               <h3 className="col-span-2 text-sm font-medium text-gray-700">Registrar pago</h3>
@@ -524,7 +537,7 @@ export default function Facturas() {
               </div>
             </form>
           )}
- 
+
           {pagosFactura.length > 0 && (
             <div className="border-t pt-4">
               <h3 className="text-sm font-medium text-gray-700 mb-2">Historial de pagos</h3>
@@ -553,7 +566,7 @@ export default function Facturas() {
           )}
         </Modal>
       )}
- 
+
       {/* Modal editar factura */}
       {editandoFactura && (
         <Modal titulo="Editar factura" onClose={() => { setEditandoFactura(null); setError('') }}>
@@ -611,7 +624,7 @@ export default function Facturas() {
           </form>
         </Modal>
       )}
- 
+
       {/* Modal confirmar eliminar */}
       {confirmEliminar && (
         <Modal titulo="Eliminar factura" onClose={() => setConfirmEliminar(null)}>
@@ -632,9 +645,9 @@ export default function Facturas() {
           </div>
         </Modal>
       )}
- 
+
       {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={cerrarToast} />}
- 
+
       {/* Tabla */}
       {isLoading ? (
         <p className="text-gray-500 text-sm">Cargando facturas...</p>
