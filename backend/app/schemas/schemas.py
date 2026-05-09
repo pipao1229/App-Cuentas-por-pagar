@@ -1,5 +1,5 @@
-from pydantic import BaseModel, condecimal
-from typing import Optional, List, Literal
+from pydantic import BaseModel
+from typing import Optional, List, Literal, Any
 from datetime import date, datetime
 from uuid import UUID
 
@@ -23,8 +23,8 @@ class ProveedorUpdate(BaseModel):
     activo:     Optional[bool] = None
 
 class ProveedorOut(ProveedorBase):
-    id:        UUID
-    activo:    bool
+    id:         UUID
+    activo:     bool
     created_at: datetime
 
     class Config:
@@ -69,7 +69,7 @@ class PagoCreate(PagoBase):
     pass
 
 class PagoOut(PagoBase):
-    id:        UUID
+    id:         UUID
     created_at: datetime
 
     class Config:
@@ -77,7 +77,7 @@ class PagoOut(PagoBase):
 
 # ── Comprobantes ──────────────────────────────
 class ComprobanteCreate(BaseModel):
-    entidad:            Literal["empresa", "ferreteria"]  # rechaza cualquier otro valor
+    entidad:            Literal["empresa", "ferreteria"]
     clave:              str
     numero_consecutivo: str
     emisor_nombre:      str
@@ -85,15 +85,21 @@ class ComprobanteCreate(BaseModel):
     fecha_emision:      date
     moneda_original:    Literal["CRC", "USD"]
     tipo_cambio:        float
-    subtotal_crc:       float
+    subtotal_crc:       float          # TotalVentaNeta en CRC
     descuentos_crc:     float = 0
     impuesto_crc:       float = 0
-    total_crc:          float
+    total_crc:          float          # TotalComprobante en CRC
+    gravado_crc:        float = 0      # TotalGravado en CRC
+    exento_crc:         float = 0      # TotalExento en CRC
+    exonerado_crc:      float = 0      # TotalExonerado en CRC
+    no_sujeto_crc:      float = 0      # TotalNoSujeto en CRC
     tasas_iva:          str
     tipo_comprobante:   str = "Factura"
+    desglose_iva:       List[Any] = [] # [{tasa, label, subtotal_crc, impuesto_crc}]
+    xml_original:       Optional[str] = None
 
 class ComprobanteOut(ComprobanteCreate):
-    id:        UUID
+    id:         UUID
     created_at: datetime
 
     class Config:

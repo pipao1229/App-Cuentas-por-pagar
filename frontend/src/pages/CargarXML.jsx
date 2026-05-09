@@ -3,18 +3,19 @@ import { useQueryClient } from '@tanstack/react-query'
 import { crearComprobante } from '../api/comprobantes'
 import Toast from '../components/Toast'
 
-// ── Mapa de CodigoTarifaIVA → etiqueta legible ─────────────────────────────
+// ── Códigos oficiales de CodigoTarifaIVA según XSD Hacienda v4.4 ───────────
 const TASA_LABEL = {
-  '01': '1%',
-  '02': '2%',
-  '03': '4%',
-  '04': '0% Exento',
-  '05': '0% Exonerado',
-  '06': '0% No sujeto',
-  '07': '1% Canasta básica',
-  '08': '13%',
-  '09': '4% Reducida',
-  '10': '0% No sujeto',
+  '01': '0% Exento',        // Tarifa 0% (Artículo 32, num 1, RLIVA)
+  '02': '1%',               // Tarifa reducida 1%
+  '03': '2%',               // Tarifa reducida 2%
+  '04': '4%',               // Tarifa reducida 4%
+  '05': '0% Transitorio',   // Transitorio 0%
+  '06': '4% Transitorio',   // Transitorio 4%
+  '07': '8%',               // Tarifa transitoria 8%
+  '08': '13%',              // Tarifa general 13%
+  '09': '0.5%',             // Tarifa reducida 0.5%
+  '10': '0% Exenta',        // Tarifa Exenta (canasta básica, medicamentos)
+  '11': '0% Sin crédito',   // Tarifa 0% sin derecho a crédito
 }
 
 // ── Tipos de documento soportados ──────────────────────────────────────────
@@ -23,13 +24,18 @@ const TIPOS_DOCUMENTO = {
   NotaCreditoElectronica: { tipo: 'Nota de Crédito', factor: -1 },
 }
 
-function getText(doc, tag) {
-  const el = doc.getElementsByTagNameNS('*', tag)[0]
-  return el ? el.textContent.trim() : ''
+function getText(el, tag) {
+  const found = el.getElementsByTagNameNS('*', tag)[0]
+  return found ? found.textContent.trim() : ''
 }
 
-function getAll(doc, tag) {
-  return Array.from(doc.getElementsByTagNameNS('*', tag))
+function getAll(el, tag) {
+  return Array.from(el.getElementsByTagNameNS('*', tag))
+}
+
+function num(str) {
+  const v = parseFloat(str || '0')
+  return isNaN(v) ? 0 : v
 }
 
 function parsearXML(texto, nombreArchivo) {
@@ -47,50 +53,88 @@ function parsearXML(texto, nombreArchivo) {
 
   const { tipo: tipoComprobante, factor } = TIPOS_DOCUMENTO[raiz]
 
-  // Datos principales
+  // ── Datos de identificación ─────────────────────────────────────────────
   const clave             = getText(doc, 'Clave')
   const numeroConsecutivo = getText(doc, 'NumeroConsecutivo')
-  const fechaEmision      = getText(doc, 'FechaEmision').substring(0, 10) // YYYY-MM-DD
-  const emisorNombre      = getText(doc, 'Nombre') // primer <Nombre> = Emisor
-  const emisorCedula      = (() => {
-    const emisorEl = doc.getElementsByTagNameNS('*', 'Emisor')[0]
-    return emisorEl ? emisorEl.getElementsByTagNameNS('*', 'Numero')[0]?.textContent.trim() : ''
-  })()
+  const fechaEmision      = getText(doc, 'FechaEmision').substring(0, 10)
+  const emisorEl          = doc.getElementsByTagNameNS('*', 'Emisor')[0]
+  const emisorNombre      = emisorEl ? getText(emisorEl, 'Nombre') : ''
+  const emisorCedula      = emisorEl
+    ? emisorEl.getElementsByTagNameNS('*', 'Numero')[0]?.textContent.trim() ?? ''
+    : ''
 
-  // Moneda y tipo de cambio
+  // ── Moneda y tipo de cambio ─────────────────────────────────────────────
   const monedaOriginal = getText(doc, 'CodigoMoneda') || 'CRC'
-  const tipoCambio     = parseFloat(getText(doc, 'TipoCambio') || '1') || 1
+  const tipoCambio     = num(getText(doc, 'TipoCambio')) || 1
+  const tc             = monedaOriginal === 'USD' ? tipoCambio : 1
 
-  // Totales del resumen en moneda original — factor convierte NC a negativos
-  const subtotalOrig    = parseFloat(getText(doc, 'TotalVentaNeta')   || '0') * factor
-  const descuentosOrig  = parseFloat(getText(doc, 'TotalDescuentos')  || '0') * factor
-  const impuestoOrig    = parseFloat(getText(doc, 'TotalImpuesto')    || '0') * factor
-  const totalOrig       = parseFloat(getText(doc, 'TotalComprobante') || '0') * factor
+  // ── ResumenFactura ──────────────────────────────────────────────────────
+  const resumen = doc.getElementsByTagNameNS('*', 'ResumenFactura')[0]
+  const getR    = (tag) => resumen ? getText(resumen, tag) : '0'
 
-  // Convertir a CRC usando tipo de cambio del XML (CRC × 1, USD × tipoCambio)
-  const tc            = monedaOriginal === 'USD' ? tipoCambio : 1
-  const subtotalCRC   = subtotalOrig  * tc
-  const descuentosCRC = descuentosOrig * tc
-  const impuestoCRC   = impuestoOrig  * tc
-  const totalCRC      = totalOrig     * tc
+  // Subtotales por tipo de transacción en moneda original
+  const gravadoOrig    = num(getR('TotalGravado'))
+  const exentoOrig     = num(getR('TotalExento'))
+  const exoneradoOrig  = num(getR('TotalExonerado'))
+  const noSujetoOrig   = num(getR('TotalNoSujeto'))
+  const descuentosOrig = num(getR('TotalDescuentos'))
+  const ventaNetaOrig  = num(getR('TotalVentaNeta'))   // ya con descuentos restados
+  const impuestoOrig   = num(getR('TotalImpuesto'))
+  const totalOrig      = num(getR('TotalComprobante')) // = ventaNeta + impuesto
 
-  // Tasas IVA — puede haber varias líneas con distintas tarifas
-  const lineas   = getAll(doc, 'LineaDetalle')
-  const tasasSet = new Set()
-  lineas.forEach(linea => {
+  // Convertir a CRC y aplicar factor (NC → negativo)
+  const gravadoCRC    = gravadoOrig    * tc * factor
+  const exentoCRC     = exentoOrig     * tc * factor
+  const exoneradoCRC  = exoneradoOrig  * tc * factor
+  const noSujetoCRC   = noSujetoOrig   * tc * factor
+  const descuentosCRC = descuentosOrig * tc * factor
+  const subtotalCRC   = ventaNetaOrig  * tc * factor
+  const impuestoCRC   = impuestoOrig   * tc * factor
+  const totalCRC      = totalOrig      * tc * factor
+
+  // ── Desglose real por tasa IVA desde TotalDesgloseImpuesto ─────────────
+  // Acumular subtotal por CodigoTarifaIVA desde las líneas de detalle
+  const subtotalPorTasa = {}
+  getAll(doc, 'LineaDetalle').forEach(linea => {
     const codigoTarifa = linea.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim()
-    if (codigoTarifa) tasasSet.add(TASA_LABEL[codigoTarifa] ?? codigoTarifa)
+    if (!codigoTarifa) return
+    // SubTotal de la línea (antes de impuesto). Algunos XML usan SubTotal, otros MontoTotalLinea
+    const montoLinea = num(getText(linea, 'SubTotal')) || num(getText(linea, 'MontoTotalLinea'))
+    subtotalPorTasa[codigoTarifa] = (subtotalPorTasa[codigoTarifa] || 0) + montoLinea
   })
-  getAll(doc, 'TotalDesgloseImpuesto').forEach(td => {
-    const ct = td.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim()
-    if (ct) tasasSet.add(TASA_LABEL[ct] ?? ct)
+
+  const desgloseNodos = resumen
+    ? getAll(resumen, 'TotalDesgloseImpuesto')
+    : getAll(doc, 'TotalDesgloseImpuesto')
+
+  const desgloseIva = desgloseNodos.map(nodo => {
+    const codigoTarifa = nodo.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim() ?? ''
+    const impuestoNodo = num(getText(nodo, 'TotalMontoImpuesto'))
+    const subtotalNodo = subtotalPorTasa[codigoTarifa] ?? 0
+    return {
+      tasa:         codigoTarifa,
+      label:        TASA_LABEL[codigoTarifa] ?? codigoTarifa,
+      subtotal_crc: subtotalNodo  * tc * factor,
+      impuesto_crc: impuestoNodo  * tc * factor,
+    }
   })
+
+  // ── Etiquetas de tasas (texto resumen) ──────────────────────────────────
+  const tasasSet = new Set()
+  if (desgloseIva.length > 0) {
+    desgloseIva.forEach(d => tasasSet.add(d.label))
+  } else {
+    getAll(doc, 'LineaDetalle').forEach(linea => {
+      const ct = linea.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim()
+      if (ct) tasasSet.add(TASA_LABEL[ct] ?? ct)
+    })
+  }
   const tasasIVA = tasasSet.size ? [...tasasSet].join(', ') : '—'
 
   return {
-    tipo: 'factura',     // para el flujo de preview
-    archivo: nombreArchivo,
-    tipoComprobante,     // 'Factura' | 'Nota de Crédito'
+    tipo:            'factura',
+    archivo:         nombreArchivo,
+    tipoComprobante,
     datos: {
       clave,
       numero_consecutivo: numeroConsecutivo,
@@ -103,8 +147,14 @@ function parsearXML(texto, nombreArchivo) {
       descuentos_crc:     descuentosCRC,
       impuesto_crc:       impuestoCRC,
       total_crc:          totalCRC,
+      gravado_crc:        gravadoCRC,
+      exento_crc:         exentoCRC,
+      exonerado_crc:      exoneradoCRC,
+      no_sujeto_crc:      noSujetoCRC,
       tasas_iva:          tasasIVA,
       tipo_comprobante:   tipoComprobante,
+      desglose_iva:       desgloseIva,
+      xml_original:       texto,
     }
   }
 }
@@ -119,7 +169,6 @@ export default function CargarXML({ entidad }) {
   const [toast, setToast]         = useState(null)
   const [guardando, setGuardando] = useState(false)
 
-  // ── Procesar archivos seleccionados ─────────────────────────────────────
   async function procesarArchivos(archivos) {
     const resultados = []
     const rechazados = []
@@ -163,7 +212,6 @@ export default function CargarXML({ entidad }) {
     setPreview(prev => prev.filter(r => r.datos.clave !== clave))
   }
 
-  // ── Guardar en backend ───────────────────────────────────────────────────
   async function guardarTodos() {
     if (!preview.length) return
     setGuardando(true)
@@ -224,7 +272,7 @@ export default function CargarXML({ entidad }) {
         </div>
       )}
 
-      {/* Preview de comprobantes listos para guardar */}
+      {/* Preview */}
       {preview.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -255,9 +303,10 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Fecha</th>
                   <th className="px-3 py-3 text-left">Moneda</th>
                   <th className="px-3 py-3 text-right">Subtotal ₡</th>
+                  <th className="px-3 py-3 text-right">Desc. ₡</th>
                   <th className="px-3 py-3 text-right">IVA ₡</th>
-                  <th className="px-3 py-3 text-left">Tasa(s) IVA</th>
                   <th className="px-3 py-3 text-right">Total ₡</th>
+                  <th className="px-3 py-3 text-left">Tasa(s) IVA</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>
               </thead>
@@ -266,11 +315,10 @@ export default function CargarXML({ entidad }) {
                   <tr key={item.datos.clave} className="hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-500 text-xs max-w-[120px] truncate" title={item.archivo}>{item.archivo}</td>
                     <td className="px-3 py-2">
-                      {item.tipoComprobante === 'Nota de Crédito' ? (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">NC</span>
-                      ) : (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">FE</span>
-                      )}
+                      {item.tipoComprobante === 'Nota de Crédito'
+                        ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">NC</span>
+                        : <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">FE</span>
+                      }
                     </td>
                     <td className="px-3 py-2 text-gray-800 font-medium">{item.datos.emisor_nombre}</td>
                     <td className="px-3 py-2 text-gray-600">{item.datos.fecha_emision.split('-').reverse().join('-')}</td>
@@ -283,12 +331,24 @@ export default function CargarXML({ entidad }) {
                     <td className={`px-3 py-2 text-right ${item.datos.subtotal_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
                       ₡{fmt(item.datos.subtotal_crc)}
                     </td>
+                    <td className={`px-3 py-2 text-right ${item.datos.descuentos_crc < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                      {item.datos.descuentos_crc !== 0 ? `₡${fmt(item.datos.descuentos_crc)}` : '—'}
+                    </td>
                     <td className={`px-3 py-2 text-right ${item.datos.impuesto_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
                       ₡{fmt(item.datos.impuesto_crc)}
                     </td>
-                    <td className="px-3 py-2 text-gray-500 text-xs">{item.datos.tasas_iva}</td>
                     <td className={`px-3 py-2 text-right font-semibold ${item.datos.total_crc < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       ₡{fmt(item.datos.total_crc)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">
+                      {item.datos.desglose_iva.length > 0
+                        ? item.datos.desglose_iva.map((d, i) => (
+                            <span key={i} className="block whitespace-nowrap">
+                              {d.label}{d.impuesto_crc !== 0 ? `: ₡${fmt(d.impuesto_crc)}` : ''}
+                            </span>
+                          ))
+                        : item.datos.tasas_iva
+                      }
                     </td>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => quitarDePreview(item.datos.clave)} className="text-red-400 hover:text-red-600 text-xs">✕</button>

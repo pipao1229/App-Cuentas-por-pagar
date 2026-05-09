@@ -218,7 +218,7 @@ export default function Facturas() {
     }
   }, [location.state, facturas])
 
-  // ── Cambio 2: PDF con "CRC" en vez de "₡" ───────────────────────────────
+  // PDF con "CRC" en vez de "₡"
   function exportarPDF() {
     const doc = new jsPDF()
     doc.setFontSize(16)
@@ -227,20 +227,17 @@ export default function Facturas() {
     doc.text(`Generado: ${new Date().toLocaleDateString('es-CR')}`, 14, 22)
 
     const partesFiltro = []
-    // ── Cambio 3: mostrar "Por pagar" en el subtítulo del PDF ──
     if (filtroEstado === 'por_pagar') partesFiltro.push('Estado: Por pagar (pendiente + vencida)')
     else if (filtroEstado) partesFiltro.push(`Estado: ${filtroEstado}`)
     if (filtroProveedor) {
       const prov = proveedores.find(p => p.id === filtroProveedor)
       if (prov) partesFiltro.push(`Proveedor: ${prov.nombre}`)
     }
-    if (partesFiltro.length) doc.text(`Filtros: ${partesFiltro.join(' | ')}`, 14, 29)
-
-    const startY = partesFiltro.length ? 35 : 28
+    const startY = 28
 
     autoTable(doc, {
       startY,
-      head: [['Proveedor', 'N Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
+      head: [['Proveedor', 'N° Factura', 'Fecha', 'Vencimiento', 'Monto', 'Saldo', 'Estado']],
       body: facturas.map(f => {
         // ── Cambio 2: usar simboloPDF para evitar el caracter roto ──
         const sim = simboloPDF(f.proveedor.moneda)

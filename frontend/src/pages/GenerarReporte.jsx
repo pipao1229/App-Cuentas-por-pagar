@@ -8,8 +8,11 @@ import Modal from '../components/Modal'
 
 const fmt = (n) => Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-// Todas las tasas posibles para la tabla resumen, en orden
-const TASAS_ORDEN = ['13%', '8%', '4%', '2%', '1%', '1% Canasta básica', '0.5%', '0% Exento', '0% Exonerado', '0% No sujeto', 'Otros cargos']
+// Orden oficial de tasas para el resumen (según XSD Hacienda)
+const TASAS_ORDEN = [
+  '13%', '8%', '4% Transitorio', '4%', '2%', '1%', '0.5%',
+  '0% Exento', '0% Exenta', '0% Transitorio', '0% Sin crédito', 'Otros cargos'
+]
 
 export default function GenerarReporte({ entidad }) {
   const queryClient = useQueryClient()
@@ -21,7 +24,7 @@ export default function GenerarReporte({ entidad }) {
 
   const { data: comprobantes = [], isLoading } = useQuery({
     queryKey: ['comprobantes', entidad, fechaDesde, fechaHasta],
-    queryFn: () => getComprobantes({
+    queryFn:  () => getComprobantes({
       entidad,
       ...(fechaDesde && { fecha_desde: fechaDesde }),
       ...(fechaHasta && { fecha_hasta: fechaHasta }),
@@ -38,67 +41,101 @@ export default function GenerarReporte({ entidad }) {
     onError: () => setToast({ mensaje: 'Error al eliminar.', tipo: 'error' })
   })
 
-  // ── Totales generales (las NC ya vienen negativas, se restan automáticamente) ──
+  // ── Totales generales ────────────────────────────────────────────────────
+  // subtotal_crc = TotalVentaNeta (ya con descuentos restados)
+  // total_crc    = TotalComprobante = subtotal + impuesto
+  // Las NC vienen con valores negativos, se restan automáticamente.
   const totales = comprobantes.reduce(
     (acc, c) => ({
+      gravado:    acc.gravado    + Number(c.gravado_crc    ?? 0),
+      exento:     acc.exento     + Number(c.exento_crc     ?? 0),
+      exonerado:  acc.exonerado  + Number(c.exonerado_crc  ?? 0),
+      no_sujeto:  acc.no_sujeto  + Number(c.no_sujeto_crc  ?? 0),
+      descuentos: acc.descuentos + Number(c.descuentos_crc ?? 0),
       subtotal:   acc.subtotal   + Number(c.subtotal_crc),
-      descuentos: acc.descuentos + Number(c.descuentos_crc),
       impuesto:   acc.impuesto   + Number(c.impuesto_crc),
       total:      acc.total      + Number(c.total_crc),
     }),
-    { subtotal: 0, descuentos: 0, impuesto: 0, total: 0 }
+    { gravado: 0, exento: 0, exonerado: 0, no_sujeto: 0, descuentos: 0, subtotal: 0, impuesto: 0, total: 0 }
   )
 
-  // ── Resumen agrupado por tasa IVA ─────────────────────────────────────────
+  // ── Resumen agrupado por tasa IVA usando desglose_iva real ───────────────
+  // desglose_iva es un array: [{tasa, label, subtotal_crc, impuesto_crc}]
+  // Si no hay desglose (comprobante antiguo), cae al método de tasas_iva string.
   const resumenPorTasa = {}
+
+  const agregarATasa = (label, subtotal, impuesto) => {
+    if (!resumenPorTasa[label]) resumenPorTasa[label] = { subtotal: 0, impuesto: 0, descuentos: 0, total: 0 }
+    resumenPorTasa[label].subtotal  += subtotal
+    resumenPorTasa[label].impuesto  += impuesto
+    resumenPorTasa[label].total     += subtotal + impuesto
+  }
+
   comprobantes.forEach(c => {
-    const tasas = c.tasas_iva.split(',').map(t => t.trim())
-    const tasa  = tasas.length === 1 ? tasas[0] : 'Otros cargos'
-    if (!resumenPorTasa[tasa]) resumenPorTasa[tasa] = { subtotal: 0, impuesto: 0, total: 0 }
-    resumenPorTasa[tasa].subtotal  += Number(c.subtotal_crc)
-    resumenPorTasa[tasa].impuesto  += Number(c.impuesto_crc)
-    resumenPorTasa[tasa].total     += Number(c.total_crc)
+    const desglose = c.desglose_iva ?? []
+    if (desglose.length > 0) {
+      // Caso con desglose real: cada entrada tiene su tasa propia
+      desglose.forEach(d => {
+        agregarATasa(d.label, Number(d.subtotal_crc), Number(d.impuesto_crc))
+      })
+    } else {
+      // Fallback para comprobantes sin desglose (cargados antes de esta versión)
+      const tasas = c.tasas_iva.split(',').map(t => t.trim())
+      const tasa  = tasas.length === 1 ? tasas[0] : 'Otros cargos'
+      agregarATasa(tasa, Number(c.subtotal_crc), Number(c.impuesto_crc))
+    }
   })
 
   // ── Exportar Excel ────────────────────────────────────────────────────────
   function exportarExcel() {
     // Sheet 1: detalle de comprobantes
     const filas = comprobantes.map(c => ({
-      'Tipo':            c.tipo_comprobante ?? 'Factura',
-      'N° Consecutivo':  c.numero_consecutivo,
-      'Fecha':           c.fecha_emision.split('-').reverse().join('-'),
-      'Emisor':          c.emisor_nombre,
-      'Moneda original': c.moneda_original,
-      'Tipo de cambio':  Number(c.tipo_cambio),
-      'Subtotal (₡)':    Number(c.subtotal_crc),
-      'Descuentos (₡)':  Number(c.descuentos_crc),
-      'IVA (₡)':         Number(c.impuesto_crc),
-      'Tasa(s) IVA':     c.tasas_iva,
-      'Total (₡)':       Number(c.total_crc),
+      'Tipo':              c.tipo_comprobante ?? 'Factura',
+      'N° Consecutivo':    c.numero_consecutivo,
+      'Fecha':             c.fecha_emision.split('-').reverse().join('-'),
+      'Emisor':            c.emisor_nombre,
+      'Moneda original':   c.moneda_original,
+      'Tipo de cambio':    Number(c.tipo_cambio),
+      'Gravado (₡)':       Number(c.gravado_crc   ?? 0),
+      'Exento (₡)':        Number(c.exento_crc    ?? 0),
+      'Exonerado (₡)':     Number(c.exonerado_crc ?? 0),
+      'No sujeto (₡)':     Number(c.no_sujeto_crc ?? 0),
+      'Descuentos (₡)':    Number(c.descuentos_crc),
+      'Subtotal neto (₡)': Number(c.subtotal_crc),
+      'IVA (₡)':           Number(c.impuesto_crc),
+      'Tasa(s) IVA':       c.tasas_iva,
+      'Total (₡)':         Number(c.total_crc),
     }))
     filas.push({})
     filas.push({
-      'Tipo':           'TOTALES',
-      'Subtotal (₡)':   totales.subtotal,
-      'Descuentos (₡)': totales.descuentos,
-      'IVA (₡)':        totales.impuesto,
-      'Total (₡)':      totales.total,
+      'Tipo':              'TOTALES',
+      'Gravado (₡)':       totales.gravado,
+      'Exento (₡)':        totales.exento,
+      'Exonerado (₡)':     totales.exonerado,
+      'No sujeto (₡)':     totales.no_sujeto,
+      'Descuentos (₡)':    totales.descuentos,
+      'Subtotal neto (₡)': totales.subtotal,
+      'IVA (₡)':           totales.impuesto,
+      'Total (₡)':         totales.total,
     })
 
     // Sheet 2: resumen por tasa IVA
-    const filasResumen = TASAS_ORDEN.map(tasa => ({
-      'Tarifa IVA':   tasa,
-      'SubTotal (₡)': resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].subtotal.toFixed(2)) : '',
-      'Impuesto (₡)': resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].impuesto.toFixed(2)) : '',
-      'IVA Devuelto': '-',
-      'Total (₡)':    resumenPorTasa[tasa] ? Number(resumenPorTasa[tasa].total.toFixed(2))    : '',
+    const todasLasTasas = [...new Set([
+      ...TASAS_ORDEN.filter(t => resumenPorTasa[t]),
+      ...Object.keys(resumenPorTasa).filter(t => !TASAS_ORDEN.includes(t))
+    ])]
+
+    const filasResumen = todasLasTasas.map(tasa => ({
+      'Tarifa IVA':        tasa,
+      'SubTotal neto (₡)': Number(resumenPorTasa[tasa].subtotal.toFixed(5)),
+      'Impuesto (₡)':      Number(resumenPorTasa[tasa].impuesto.toFixed(5)),
+      'Total (₡)':         Number(resumenPorTasa[tasa].total.toFixed(5)),
     }))
     filasResumen.push({
-      'Tarifa IVA':   'Totales',
-      'SubTotal (₡)': Number(totales.subtotal.toFixed(2)),
-      'Impuesto (₡)': Number(totales.impuesto.toFixed(2)),
-      'IVA Devuelto': '-',
-      'Total (₡)':    Number(totales.total.toFixed(2)),
+      'Tarifa IVA':        'TOTALES',
+      'SubTotal neto (₡)': Number(totales.subtotal.toFixed(5)),
+      'Impuesto (₡)':      Number(totales.impuesto.toFixed(5)),
+      'Total (₡)':         Number(totales.total.toFixed(5)),
     })
 
     const wsDetalle = XLSX.utils.json_to_sheet(filas)
@@ -121,8 +158,7 @@ export default function GenerarReporte({ entidad }) {
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
           <input
-            type="date"
-            value={fechaDesde}
+            type="date" value={fechaDesde}
             onChange={e => setFechaDesde(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -130,8 +166,7 @@ export default function GenerarReporte({ entidad }) {
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
           <input
-            type="date"
-            value={fechaHasta}
+            type="date" value={fechaHasta}
             onChange={e => setFechaHasta(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -155,20 +190,44 @@ export default function GenerarReporte({ entidad }) {
         </div>
       </div>
 
-      {/* Cuadros de totales */}
+      {/* Cuadros de totales — 4 columnas en desktop */}
       {!isLoading && comprobantes.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Subtotal',   valor: totales.subtotal,   color: 'blue'   },
-            { label: 'Descuentos', valor: totales.descuentos, color: 'gray'   },
-            { label: 'IVA total',  valor: totales.impuesto,   color: 'orange' },
-            { label: 'Total',      valor: totales.total,      color: 'green'  },
+            { label: 'Gravado',      valor: totales.gravado,    color: 'blue'   },
+            { label: 'Exento',       valor: totales.exento,     color: 'gray'   },
+            { label: 'IVA total',    valor: totales.impuesto,   color: 'orange' },
+            { label: 'Total',        valor: totales.total,      color: 'green'  },
           ].map(({ label, valor, color }) => (
             <div key={label} className={`border border-${color}-200 bg-${color}-50 rounded-xl px-4 py-3`}>
               <p className={`text-${color}-600 font-medium text-xs uppercase tracking-wide mb-0.5`}>{label}</p>
               <p className={`text-${color}-800 font-semibold text-sm`}>₡{fmt(valor)}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Fila secundaria: descuentos + exonerado + no sujeto si tienen valor */}
+      {!isLoading && comprobantes.length > 0 && (totales.descuentos !== 0 || totales.exonerado !== 0 || totales.no_sujeto !== 0) && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {totales.descuentos !== 0 && (
+            <div className="border border-red-200 bg-red-50 rounded-xl px-4 py-3">
+              <p className="text-red-600 font-medium text-xs uppercase tracking-wide mb-0.5">Descuentos</p>
+              <p className="text-red-800 font-semibold text-sm">₡{fmt(totales.descuentos)}</p>
+            </div>
+          )}
+          {totales.exonerado !== 0 && (
+            <div className="border border-purple-200 bg-purple-50 rounded-xl px-4 py-3">
+              <p className="text-purple-600 font-medium text-xs uppercase tracking-wide mb-0.5">Exonerado</p>
+              <p className="text-purple-800 font-semibold text-sm">₡{fmt(totales.exonerado)}</p>
+            </div>
+          )}
+          {totales.no_sujeto !== 0 && (
+            <div className="border border-slate-200 bg-slate-50 rounded-xl px-4 py-3">
+              <p className="text-slate-600 font-medium text-xs uppercase tracking-wide mb-0.5">No sujeto</p>
+              <p className="text-slate-800 font-semibold text-sm">₡{fmt(totales.no_sujeto)}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -182,18 +241,28 @@ export default function GenerarReporte({ entidad }) {
             <thead className="text-gray-500 uppercase text-xs bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left">Tarifa IVA</th>
-                <th className="px-4 py-2 text-right">SubTotal ₡</th>
+                <th className="px-4 py-2 text-right">SubTotal neto ₡</th>
                 <th className="px-4 py-2 text-right">Impuesto ₡</th>
                 <th className="px-4 py-2 text-right">Total ₡</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {TASAS_ORDEN.filter(t => resumenPorTasa[t]).map(tasa => (
+              {/* Tasas en orden oficial primero, luego cualquier tasa extra */}
+              {[
+                ...TASAS_ORDEN.filter(t => resumenPorTasa[t]),
+                ...Object.keys(resumenPorTasa).filter(t => !TASAS_ORDEN.includes(t))
+              ].map(tasa => (
                 <tr key={tasa} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-gray-700 font-medium">{tasa}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">₡{fmt(resumenPorTasa[tasa].subtotal)}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">₡{fmt(resumenPorTasa[tasa].impuesto)}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-gray-800">₡{fmt(resumenPorTasa[tasa].total)}</td>
+                  <td className={`px-4 py-2 text-right ${resumenPorTasa[tasa].subtotal < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    ₡{fmt(resumenPorTasa[tasa].subtotal)}
+                  </td>
+                  <td className={`px-4 py-2 text-right ${resumenPorTasa[tasa].impuesto < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    ₡{fmt(resumenPorTasa[tasa].impuesto)}
+                  </td>
+                  <td className={`px-4 py-2 text-right font-semibold ${resumenPorTasa[tasa].total < 0 ? 'text-red-600' : 'text-gray-800'}`}>
+                    ₡{fmt(resumenPorTasa[tasa].total)}
+                  </td>
                 </tr>
               ))}
               <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
@@ -207,7 +276,7 @@ export default function GenerarReporte({ entidad }) {
         </div>
       )}
 
-      {/* Tabla detalle de comprobantes */}
+      {/* Tabla detalle */}
       {isLoading ? (
         <p className="text-gray-500 text-sm">Cargando comprobantes...</p>
       ) : comprobantes.length === 0 ? (
@@ -216,7 +285,7 @@ export default function GenerarReporte({ entidad }) {
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
             <p className="text-sm font-medium text-gray-700">
               {comprobantes.length} comprobante{comprobantes.length > 1 ? 's' : ''}
             </p>
@@ -229,7 +298,8 @@ export default function GenerarReporte({ entidad }) {
                 <th className="px-3 py-3 text-left">Emisor</th>
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">Moneda</th>
-                <th className="px-3 py-3 text-right">Subtotal ₡</th>
+                <th className="px-3 py-3 text-right">Gravado ₡</th>
+                <th className="px-3 py-3 text-right">Exento ₡</th>
                 <th className="px-3 py-3 text-right">Desc. ₡</th>
                 <th className="px-3 py-3 text-right">IVA ₡</th>
                 <th className="px-3 py-3 text-left">Tasa(s) IVA</th>
@@ -238,44 +308,59 @@ export default function GenerarReporte({ entidad }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {comprobantes.map(c => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 text-gray-500 text-xs font-mono">{c.numero_consecutivo}</td>
-                  <td className="px-3 py-2">
-                    {c.tipo_comprobante === 'Nota de Crédito' ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">NC</span>
-                    ) : (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">FE</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-gray-800 font-medium">{c.emisor_nombre}</td>
-                  <td className="px-3 py-2 text-gray-600">{c.fecha_emision.split('-').reverse().join('-')}</td>
-                  <td className="px-3 py-2">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.moneda_original === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {c.moneda_original}
-                    </span>
-                  </td>
-                  <td className={`px-3 py-2 text-right ${Number(c.subtotal_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                    ₡{fmt(c.subtotal_crc)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-gray-500">₡{fmt(c.descuentos_crc)}</td>
-                  <td className={`px-3 py-2 text-right ${Number(c.impuesto_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                    ₡{fmt(c.impuesto_crc)}
-                  </td>
-                  <td className="px-3 py-2 text-gray-500 text-xs">{c.tasas_iva}</td>
-                  <td className={`px-3 py-2 text-right font-semibold ${Number(c.total_crc) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                    ₡{fmt(c.total_crc)}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      onClick={() => setConfirmEliminar(c)}
-                      className="text-red-400 hover:text-red-600 text-xs font-medium"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {comprobantes.map(c => {
+                const desglose = c.desglose_iva ?? []
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 text-gray-500 text-xs font-mono">{c.numero_consecutivo}</td>
+                    <td className="px-3 py-2">
+                      {c.tipo_comprobante === 'Nota de Crédito'
+                        ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">NC</span>
+                        : <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">FE</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-gray-800 font-medium">{c.emisor_nombre}</td>
+                    <td className="px-3 py-2 text-gray-600">{c.fecha_emision.split('-').reverse().join('-')}</td>
+                    <td className="px-3 py-2">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.moneda_original === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {c.moneda_original}
+                      </span>
+                    </td>
+                    <td className={`px-3 py-2 text-right ${Number(c.gravado_crc ?? 0) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                      {Number(c.gravado_crc ?? 0) !== 0 ? `₡${fmt(c.gravado_crc)}` : '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${Number(c.exento_crc ?? 0) < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                      {Number(c.exento_crc ?? 0) !== 0 ? `₡${fmt(c.exento_crc)}` : '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${Number(c.descuentos_crc) < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                      {Number(c.descuentos_crc) !== 0 ? `₡${fmt(c.descuentos_crc)}` : '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${Number(c.impuesto_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                      {/* Si hay desglose por tasa, mostrar cada una */}
+                      {desglose.length > 1
+                        ? desglose.map((d, i) => (
+                            <span key={i} className="block whitespace-nowrap text-xs">
+                              {d.label}: ₡{fmt(d.impuesto_crc)}
+                            </span>
+                          ))
+                        : `₡${fmt(c.impuesto_crc)}`
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">{c.tasas_iva}</td>
+                    <td className={`px-3 py-2 text-right font-semibold ${Number(c.total_crc) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      ₡{fmt(c.total_crc)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => setConfirmEliminar(c)}
+                        className="text-red-400 hover:text-red-600 text-xs font-medium"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
