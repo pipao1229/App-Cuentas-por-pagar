@@ -5,7 +5,7 @@ import Toast from '../components/Toast'
 
 // ── Códigos oficiales de CodigoTarifaIVA según XSD Hacienda v4.4 ───────────
 const TASA_LABEL = {
-  '01': '0% Exento',        // Tarifa 0% (Artículo 32, num 1, RLIVA)
+  '01': '0%',               // Tarifa 0% (Artículo 32, num 1, RLIVA)
   '02': '1%',               // Tarifa reducida 1%
   '03': '2%',               // Tarifa reducida 2%
   '04': '4%',               // Tarifa reducida 4%
@@ -72,33 +72,31 @@ function parsearXML(texto, nombreArchivo) {
   const resumen = doc.getElementsByTagNameNS('*', 'ResumenFactura')[0]
   const getR    = (tag) => resumen ? getText(resumen, tag) : '0'
 
-  // Subtotales por tipo de transacción en moneda original
   const gravadoOrig    = num(getR('TotalGravado'))
   const exentoOrig     = num(getR('TotalExento'))
   const exoneradoOrig  = num(getR('TotalExonerado'))
   const noSujetoOrig   = num(getR('TotalNoSujeto'))
   const descuentosOrig = num(getR('TotalDescuentos'))
-  const ventaNetaOrig  = num(getR('TotalVentaNeta'))   // ya con descuentos restados
+  const ventaNetaOrig  = num(getR('TotalVentaNeta'))
   const impuestoOrig   = num(getR('TotalImpuesto'))
-  const totalOrig      = num(getR('TotalComprobante')) // = ventaNeta + impuesto
+  const totalOrig      = num(getR('TotalComprobante'))
 
-  // Convertir a CRC y aplicar factor (NC → negativo)
-  const gravadoCRC    = gravadoOrig    * tc * factor
-  const exentoCRC     = exentoOrig     * tc * factor
-  const exoneradoCRC  = exoneradoOrig  * tc * factor
-  const noSujetoCRC   = noSujetoOrig   * tc * factor
-  const descuentosCRC = descuentosOrig * tc * factor
-  const subtotalCRC   = ventaNetaOrig  * tc * factor
-  const impuestoCRC   = impuestoOrig   * tc * factor
-  const totalCRC      = totalOrig      * tc * factor
+  // Convertir a CRC con 2 decimales y aplicar factor
+  const r2 = (v) => Math.round(v * 100) / 100
+  const gravadoCRC    = r2(gravadoOrig    * tc * factor)
+  const exentoCRC     = r2(exentoOrig     * tc * factor)
+  const exoneradoCRC  = r2(exoneradoOrig  * tc * factor)
+  const noSujetoCRC   = r2(noSujetoOrig   * tc * factor)
+  const descuentosCRC = r2(descuentosOrig * tc * factor)
+  const subtotalCRC   = r2(ventaNetaOrig  * tc * factor)
+  const impuestoCRC   = r2(impuestoOrig   * tc * factor)
+  const totalCRC      = r2(totalOrig      * tc * factor)
 
-  // ── Desglose real por tasa IVA desde TotalDesgloseImpuesto ─────────────
-  // Acumular subtotal por CodigoTarifaIVA desde las líneas de detalle
+  // ── Desglose real por tasa IVA ──────────────────────────────────────────
   const subtotalPorTasa = {}
   getAll(doc, 'LineaDetalle').forEach(linea => {
     const codigoTarifa = linea.getElementsByTagNameNS('*', 'CodigoTarifaIVA')[0]?.textContent.trim()
     if (!codigoTarifa) return
-    // SubTotal de la línea (antes de impuesto). Algunos XML usan SubTotal, otros MontoTotalLinea
     const montoLinea = num(getText(linea, 'SubTotal')) || num(getText(linea, 'MontoTotalLinea'))
     subtotalPorTasa[codigoTarifa] = (subtotalPorTasa[codigoTarifa] || 0) + montoLinea
   })
@@ -114,8 +112,8 @@ function parsearXML(texto, nombreArchivo) {
     return {
       tasa:         codigoTarifa,
       label:        TASA_LABEL[codigoTarifa] ?? codigoTarifa,
-      subtotal_crc: subtotalNodo  * tc * factor,
-      impuesto_crc: impuestoNodo  * tc * factor,
+      subtotal_crc: r2(subtotalNodo * tc * factor),
+      impuesto_crc: r2(impuestoNodo * tc * factor),
     }
   })
 
@@ -302,11 +300,11 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Emisor</th>
                   <th className="px-3 py-3 text-left">Fecha</th>
                   <th className="px-3 py-3 text-left">Moneda</th>
-                  <th className="px-3 py-3 text-right">Subtotal ₡</th>
+                  <th className="px-3 py-3 text-right">Gravado ₡</th>
+                  <th className="px-3 py-3 text-right">Exento ₡</th>
                   <th className="px-3 py-3 text-right">Desc. ₡</th>
                   <th className="px-3 py-3 text-right">IVA ₡</th>
                   <th className="px-3 py-3 text-right">Total ₡</th>
-                  <th className="px-3 py-3 text-left">Tasa(s) IVA</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>
               </thead>
@@ -328,27 +326,28 @@ export default function CargarXML({ entidad }) {
                         {item.datos.moneda_original === 'USD' && <span className="ml-1 text-gray-400">×{item.datos.tipo_cambio}</span>}
                       </span>
                     </td>
-                    <td className={`px-3 py-2 text-right ${item.datos.subtotal_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                      ₡{fmt(item.datos.subtotal_crc)}
+                    <td className={`px-3 py-2 text-right ${item.datos.gravado_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                      {item.datos.gravado_crc !== 0 ? `₡${fmt(item.datos.gravado_crc)}` : '—'}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${item.datos.exento_crc < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                      {item.datos.exento_crc !== 0 ? `₡${fmt(item.datos.exento_crc)}` : '—'}
                     </td>
                     <td className={`px-3 py-2 text-right ${item.datos.descuentos_crc < 0 ? 'text-red-600' : 'text-gray-500'}`}>
                       {item.datos.descuentos_crc !== 0 ? `₡${fmt(item.datos.descuentos_crc)}` : '—'}
                     </td>
                     <td className={`px-3 py-2 text-right ${item.datos.impuesto_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                      ₡{fmt(item.datos.impuesto_crc)}
+                      {/* Desglose por tasa si hay varias */}
+                      {item.datos.desglose_iva.length > 1
+                        ? item.datos.desglose_iva.map((d, i) => (
+                            <span key={i} className="block whitespace-nowrap text-xs">
+                              {d.label}: ₡{fmt(d.impuesto_crc)}
+                            </span>
+                          ))
+                        : `₡${fmt(item.datos.impuesto_crc)}`
+                      }
                     </td>
                     <td className={`px-3 py-2 text-right font-semibold ${item.datos.total_crc < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       ₡{fmt(item.datos.total_crc)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 text-xs">
-                      {item.datos.desglose_iva.length > 0
-                        ? item.datos.desglose_iva.map((d, i) => (
-                            <span key={i} className="block whitespace-nowrap">
-                              {d.label}{d.impuesto_crc !== 0 ? `: ₡${fmt(d.impuesto_crc)}` : ''}
-                            </span>
-                          ))
-                        : item.datos.tasas_iva
-                      }
                     </td>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => quitarDePreview(item.datos.clave)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
