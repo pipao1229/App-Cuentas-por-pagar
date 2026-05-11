@@ -318,6 +318,7 @@ export default function GenerarReporte({ entidad }) {
                 <th className="px-3 py-3 text-left">Moneda</th>
                 <th className="px-3 py-3 text-right">Subtotal ₡</th>
                 <th className="px-3 py-3 text-right">Desc. ₡</th>
+                <th className="px-3 py-3 text-left">Tasa(s)</th>
                 <th className="px-3 py-3 text-right">IVA ₡</th>
                 <th className="px-3 py-3 text-right">Total ₡</th>
                 <th className="px-3 py-3 text-center">Acciones</th>
@@ -347,6 +348,12 @@ export default function GenerarReporte({ entidad }) {
                     </td>
                     <td className={`px-3 py-2 text-right ${r2(c.descuentos_crc) < 0 ? 'text-red-600' : 'text-gray-500'}`}>
                       {r2(c.descuentos_crc) !== 0 ? `₡${fmt(c.descuentos_crc)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">
+                      {(c.desglose_iva ?? []).length > 0
+                        ? (c.desglose_iva ?? []).map(d => d.label).join(', ')
+                        : c.tasas_iva
+                      }
                     </td>
                     <td className={`px-3 py-2 text-right text-xs ${r2(c.impuesto_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
                       {desglose.length > 1
