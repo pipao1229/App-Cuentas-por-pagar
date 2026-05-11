@@ -302,8 +302,8 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Moneda</th>
                   <th className="px-3 py-3 text-right">Subtotal ₡</th>
                   <th className="px-3 py-3 text-right">Desc. ₡</th>
-                  <th className="px-3 py-3 text-right">IVA ₡</th>
                   <th className="px-3 py-3 text-left">Tasa(s)</th>
+                  <th className="px-3 py-3 text-right">IVA ₡</th>
                   <th className="px-3 py-3 text-right">Total ₡</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>

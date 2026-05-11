@@ -316,8 +316,7 @@ export default function GenerarReporte({ entidad }) {
                 <th className="px-3 py-3 text-left">Emisor</th>
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">Moneda</th>
-                <th className="px-3 py-3 text-right">Gravado ₡</th>
-                <th className="px-3 py-3 text-right">Exento ₡</th>
+                <th className="px-3 py-3 text-right">Subtotal ₡</th>
                 <th className="px-3 py-3 text-right">Desc. ₡</th>
                 <th className="px-3 py-3 text-right">IVA ₡</th>
                 <th className="px-3 py-3 text-right">Total ₡</th>
