@@ -343,11 +343,8 @@ export default function GenerarReporte({ entidad }) {
                         {c.moneda_original}
                       </span>
                     </td>
-                    <td className={`px-3 py-2 text-right ${r2(c.gravado_crc ?? 0) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                      {r2(c.gravado_crc ?? 0) !== 0 ? `₡${fmt(c.gravado_crc)}` : '—'}
-                    </td>
-                    <td className={`px-3 py-2 text-right ${r2(c.exento_crc ?? 0) < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                      {r2(c.exento_crc ?? 0) !== 0 ? `₡${fmt(c.exento_crc)}` : '—'}
+                    <td className={`px-3 py-2 text-right ${r2(c.subtotal_crc) < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                      ₡{fmt(r2(c.subtotal_crc))}
                     </td>
                     <td className={`px-3 py-2 text-right ${r2(c.descuentos_crc) < 0 ? 'text-red-600' : 'text-gray-500'}`}>
                       {r2(c.descuentos_crc) !== 0 ? `₡${fmt(c.descuentos_crc)}` : '—'}

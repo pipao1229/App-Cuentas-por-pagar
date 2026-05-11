@@ -300,10 +300,10 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Emisor</th>
                   <th className="px-3 py-3 text-left">Fecha</th>
                   <th className="px-3 py-3 text-left">Moneda</th>
-                  <th className="px-3 py-3 text-right">Gravado ₡</th>
-                  <th className="px-3 py-3 text-right">Exento ₡</th>
+                  <th className="px-3 py-3 text-right">Subtotal ₡</th>
                   <th className="px-3 py-3 text-right">Desc. ₡</th>
                   <th className="px-3 py-3 text-right">IVA ₡</th>
+                  <th className="px-3 py-3 text-left">Tasa(s)</th>
                   <th className="px-3 py-3 text-right">Total ₡</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>
@@ -326,14 +326,17 @@ export default function CargarXML({ entidad }) {
                         {item.datos.moneda_original === 'USD' && <span className="ml-1 text-gray-400">×{item.datos.tipo_cambio}</span>}
                       </span>
                     </td>
-                    <td className={`px-3 py-2 text-right ${item.datos.gravado_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                      {item.datos.gravado_crc !== 0 ? `₡${fmt(item.datos.gravado_crc)}` : '—'}
-                    </td>
-                    <td className={`px-3 py-2 text-right ${item.datos.exento_crc < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                      {item.datos.exento_crc !== 0 ? `₡${fmt(item.datos.exento_crc)}` : '—'}
+                    <td className={`px-3 py-2 text-right ${item.datos.subtotal_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                      ₡{fmt(item.datos.subtotal_crc)}
                     </td>
                     <td className={`px-3 py-2 text-right ${item.datos.descuentos_crc < 0 ? 'text-red-600' : 'text-gray-500'}`}>
                       {item.datos.descuentos_crc !== 0 ? `₡${fmt(item.datos.descuentos_crc)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">
+                      {(item.datos.desglose_iva ?? []).length > 0
+                        ? (item.datos.desglose_iva ?? []).map(d => d.label).join(', ')
+                        : item.datos.tasas_iva
+                      }
                     </td>
                     <td className={`px-3 py-2 text-right ${item.datos.impuesto_crc < 0 ? 'text-red-600' : 'text-gray-700'}`}>
                       {/* Desglose por tasa si hay varias */}
