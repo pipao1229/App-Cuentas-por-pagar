@@ -76,4 +76,5 @@ class Comprobante(Base):
     tipo_comprobante   = Column(String(20), nullable=False, default="Factura")
     desglose_iva       = Column(JSONB, nullable=False, default=list) # [{tasa, label, impuesto_crc, subtotal_crc}]
     xml_original       = Column(Text, nullable=True)                 # XML crudo para auditoría
+    detalle            = Column(String(300), nullable=True)          # Categoría/detalle (ej: "comida", "gasolina")
     created_at         = Column(TIMESTAMP(timezone=True), server_default=func.now())

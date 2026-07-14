@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Comprobante
-from app.schemas.schemas import ComprobanteCreate, ComprobanteOut
+from app.schemas.schemas import ComprobanteCreate, ComprobanteOut, ComprobanteUpdateDetalle
 from typing import List, Optional
 from datetime import date
 
@@ -42,6 +42,17 @@ def listar_comprobantes(
     if fecha_hasta:
         q = q.filter(Comprobante.fecha_emision <= fecha_hasta)
     return q.order_by(Comprobante.fecha_emision.desc()).all()
+
+
+@router.patch("/{comprobante_id}/detalle", response_model=ComprobanteOut)
+def actualizar_detalle(comprobante_id: str, datos: ComprobanteUpdateDetalle, db: Session = Depends(get_db)):
+    c = db.query(Comprobante).filter(Comprobante.id == comprobante_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado.")
+    c.detalle = datos.detalle
+    db.commit()
+    db.refresh(c)
+    return c
 
 
 @router.delete("/{comprobante_id}")

@@ -75,6 +75,12 @@ class PagoOut(PagoBase):
     class Config:
         from_attributes = True
 
+class PagoUpdate(BaseModel):
+    fecha_pago:         Optional[date] = None
+    monto_pagado:       Optional[float] = None
+    numero_comprobante: Optional[str] = None
+    notas:              Optional[str] = None
+
 # ── Comprobantes ──────────────────────────────
 class ComprobanteCreate(BaseModel):
     entidad:            Literal["empresa", "ferreteria"]
@@ -97,6 +103,7 @@ class ComprobanteCreate(BaseModel):
     tipo_comprobante:   str = "Factura"
     desglose_iva:       List[Any] = [] # [{tasa, label, subtotal_crc, impuesto_crc}]
     xml_original:       Optional[str] = None
+    detalle:            Optional[str] = None  # Categoría (ej: "comida", "gasolina"), sugerida desde el XML
 
 class ComprobanteOut(ComprobanteCreate):
     id:         UUID
@@ -104,3 +111,6 @@ class ComprobanteOut(ComprobanteCreate):
 
     class Config:
         from_attributes = True
+
+class ComprobanteUpdateDetalle(BaseModel):
+    detalle: Optional[str] = None

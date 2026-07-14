@@ -129,6 +129,16 @@ function parsearXML(texto, nombreArchivo) {
   }
   const tasasIVA = tasasSet.size ? [...tasasSet].join(', ') : '—'
 
+  // ── Detalle sugerido: descripción de las líneas del XML ─────────────────
+  // Ayuda al cliente a saber de qué es la factura para poder categorizarla
+  // (ej: "comida", "gasolina"). Queda como punto de partida editable.
+  const detalleItems = getAll(doc, 'LineaDetalle')
+    .map(linea => getText(linea, 'Detalle'))
+    .filter(Boolean)
+  const detalleSugerido = detalleItems.length
+    ? [...new Set(detalleItems)].slice(0, 3).join(' · ')
+    : ''
+
   return {
     tipo:            'factura',
     archivo:         nombreArchivo,
@@ -153,6 +163,7 @@ function parsearXML(texto, nombreArchivo) {
       tipo_comprobante:   tipoComprobante,
       desglose_iva:       desgloseIva,
       xml_original:       texto,
+      detalle:            detalleSugerido,
     }
   }
 }
@@ -208,6 +219,12 @@ export default function CargarXML({ entidad }) {
 
   function quitarDePreview(clave) {
     setPreview(prev => prev.filter(r => r.datos.clave !== clave))
+  }
+
+  function actualizarDetallePreview(clave, detalle) {
+    setPreview(prev => prev.map(r =>
+      r.datos.clave === clave ? { ...r, datos: { ...r.datos, detalle } } : r
+    ))
   }
 
   async function guardarTodos() {
@@ -305,6 +322,7 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Tasa(s)</th>
                   <th className="px-3 py-3 text-right">IVA ₡</th>
                   <th className="px-3 py-3 text-right">Total ₡</th>
+                  <th className="px-3 py-3 text-left">Detalle</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>
               </thead>
@@ -351,6 +369,14 @@ export default function CargarXML({ entidad }) {
                     </td>
                     <td className={`px-3 py-2 text-right font-semibold ${item.datos.total_crc < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       ₡{fmt(item.datos.total_crc)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        className="w-40 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={item.datos.detalle ?? ''}
+                        onChange={e => actualizarDetallePreview(item.datos.clave, e.target.value)}
+                        placeholder="comida, gasolina..."
+                      />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => quitarDePreview(item.datos.clave)} className="text-red-400 hover:text-red-600 text-xs">✕</button>

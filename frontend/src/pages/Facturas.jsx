@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getFacturas, crearFactura, eliminarFactura, actualizarFactura } from '../api/facturas'
 import { getProveedores } from '../api/proveedores'
-import { registrarPago, getPagosPorFactura } from '../api/pagos'
+import { registrarPago, getPagosPorFactura, actualizarPago } from '../api/pagos'
 import EstadoBadge from '../components/EstadoBadge'
 import Modal from '../components/Modal'
 import Toast from '../components/Toast'
@@ -39,6 +39,8 @@ export default function Facturas() {
   const [confirmEliminar, setConfirmEliminar] = useState(null)
   const [editandoFactura, setEditandoFactura] = useState(null)
   const [formEditar, setFormEditar] = useState(formFacturaVacio)
+  const [editandoPagoId, setEditandoPagoId] = useState(null)
+  const [formEditarPago, setFormEditarPago] = useState(formPagoVacio)
   const cerrarToast = useCallback(() => setToast(null), [])
   const location = useLocation()
   const yaAbrio = useRef(false)
@@ -144,6 +146,20 @@ export default function Facturas() {
     onError: (e) => setError(e.response?.data?.detail ?? 'Error al registrar el pago.')
   })
 
+  const actualizarPagoMutation = useMutation({
+    mutationFn: ({ id, datos }) => actualizarPago(id, datos),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['facturas'])
+      queryClient.invalidateQueries(['dashboard'])
+      queryClient.invalidateQueries(['pagos', facturaSeleccionada?.id])
+      setEditandoPagoId(null)
+      setFormEditarPago(formPagoVacio)
+      setError('')
+      setToast({ mensaje: 'Pago actualizado correctamente.', tipo: 'exito' })
+    },
+    onError: (e) => setError(e.response?.data?.detail ?? 'Error al actualizar el pago.')
+  })
+
   function handleSubmitFactura(e) {
     e.preventDefault()
     if (!formFactura.proveedor_id) return setError('Selecciona un proveedor.')
@@ -192,6 +208,41 @@ export default function Facturas() {
     setMostrarPagos(true)
     setError('')
     setFormPago(formPagoVacio)
+    setEditandoPagoId(null)
+  }
+
+  function abrirEditarPago(p) {
+    setEditandoPagoId(p.id)
+    setFormEditarPago({
+      fecha_pago:         p.fecha_pago,
+      monto_pagado:       p.monto_pagado,
+      numero_comprobante: p.numero_comprobante ?? '',
+      notas:              p.notas ?? ''
+    })
+    setError('')
+  }
+
+  function cancelarEditarPago() {
+    setEditandoPagoId(null)
+    setFormEditarPago(formPagoVacio)
+    setError('')
+  }
+
+  function guardarEdicionPago(e) {
+    e.preventDefault()
+    if (!formEditarPago.fecha_pago) return setError('La fecha de pago es obligatoria.')
+    if (!formEditarPago.monto_pagado || Number(formEditarPago.monto_pagado) <= 0)
+      return setError('El monto debe ser mayor a 0.')
+    setError('')
+    actualizarPagoMutation.mutate({
+      id: editandoPagoId,
+      datos: {
+        fecha_pago:         formEditarPago.fecha_pago,
+        monto_pagado:       Number(formEditarPago.monto_pagado),
+        numero_comprobante: formEditarPago.numero_comprobante,
+        notas:              formEditarPago.notas
+      }
+    })
   }
 
   function abrirEditar(f) {
@@ -469,7 +520,7 @@ export default function Facturas() {
 
       {/* Modal pagos */}
       {mostrarPagos && facturaSeleccionada && (
-        <Modal titulo={`Pagos — ${facturaSeleccionada.numero_factura}`} onClose={() => { setMostrarPagos(false); setError('') }}>
+        <Modal titulo={`Pagos — ${facturaSeleccionada.numero_factura}`} onClose={() => { setMostrarPagos(false); setError(''); cancelarEditarPago() }}>
           <div className="mb-3">
             <p className="text-sm text-gray-500">
               Saldo pendiente: <span className="font-semibold text-gray-800">
@@ -544,18 +595,67 @@ export default function Facturas() {
                     <th className="py-2 text-left">Fecha</th>
                     <th className="py-2 text-left">Comprobante</th>
                     <th className="py-2 text-right">Monto</th>
+                    <th className="py-2 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {pagosFactura.map(p => (
-                    <tr key={p.id}>
-                      <td className="py-2 text-gray-600">{formatFecha(p.fecha_pago)}</td>
-                      <td className="py-2 text-gray-600">{p.numero_comprobante ?? '—'}</td>
-                      <td className="py-2 text-right font-medium text-gray-800">
-                        {facturaSeleccionada.proveedor.moneda === 'USD' ? '$' : '₡'}
-                        {Number(p.monto_pagado).toLocaleString('es-CR')}
-                      </td>
-                    </tr>
+                    editandoPagoId === p.id ? (
+                      <tr key={p.id} className="bg-blue-50">
+                        <td className="py-2 pr-2">
+                          <input
+                            type="date"
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={formEditarPago.fecha_pago}
+                            onChange={e => setFormEditarPago({ ...formEditarPago, fecha_pago: e.target.value })}
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={formEditarPago.numero_comprobante}
+                            onChange={e => setFormEditarPago({ ...formEditarPago, numero_comprobante: e.target.value })}
+                            placeholder="N° comprobante"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={formEditarPago.monto_pagado}
+                            onChange={e => setFormEditarPago({ ...formEditarPago, monto_pagado: e.target.value })}
+                          />
+                        </td>
+                        <td className="py-2 text-center whitespace-nowrap">
+                          <button
+                            onClick={guardarEdicionPago}
+                            disabled={actualizarPagoMutation.isPending}
+                            className="text-green-600 hover:text-green-800 text-xs font-medium mr-2 disabled:opacity-50"
+                          >
+                            {actualizarPagoMutation.isPending ? 'Guardando...' : 'Guardar'}
+                          </button>
+                          <button onClick={cancelarEditarPago} className="text-gray-500 hover:text-gray-700 text-xs font-medium">
+                            Cancelar
+                          </button>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={p.id}>
+                        <td className="py-2 text-gray-600">{formatFecha(p.fecha_pago)}</td>
+                        <td className="py-2 text-gray-600">{p.numero_comprobante ?? '—'}</td>
+                        <td className="py-2 text-right font-medium text-gray-800">
+                          {facturaSeleccionada.proveedor.moneda === 'USD' ? '$' : '₡'}
+                          {Number(p.monto_pagado).toLocaleString('es-CR')}
+                        </td>
+                        <td className="py-2 text-center">
+                          <button onClick={() => abrirEditarPago(p)} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                    )
                   ))}
                 </tbody>
               </table>
