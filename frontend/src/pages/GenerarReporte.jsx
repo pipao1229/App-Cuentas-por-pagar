@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getComprobantes, eliminarComprobante, actualizarDetalleComprobante } from '../api/comprobantes'
+import { NOMBRES_CATEGORIAS } from '../utils/categorias'
 import { formatFecha } from '../utils/fecha'
 import * as XLSX from 'xlsx'
 import Toast from '../components/Toast'
@@ -114,7 +115,7 @@ export default function GenerarReporte({ entidad }) {
       'N° Consecutivo':    c.numero_consecutivo,
       'Fecha':             c.fecha_emision.split('-').reverse().join('-'),
       'Emisor':            c.emisor_nombre,
-      'Detalle':           c.detalle ?? '',
+      'Categoría':         c.detalle ?? '',
       'Moneda original':   c.moneda_original,
       'Tipo de cambio':    r2(c.tipo_cambio),
       'Gravado (₡)':       r2(c.gravado_crc   ?? 0),
@@ -333,7 +334,7 @@ export default function GenerarReporte({ entidad }) {
                 <th className="px-3 py-3 text-left">Tasa(s)</th>
                 <th className="px-3 py-3 text-right">IVA ₡</th>
                 <th className="px-3 py-3 text-right">Total ₡</th>
-                <th className="px-3 py-3 text-left">Detalle</th>
+                <th className="px-3 py-3 text-left">Categoría</th>
                 <th className="px-3 py-3 text-center">Acciones</th>
               </tr>
             </thead>
@@ -382,13 +383,18 @@ export default function GenerarReporte({ entidad }) {
                       ₡{fmt(r2(c.total_crc))}
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        key={`${c.id}-${c.detalle ?? ''}`}
-                        defaultValue={c.detalle ?? ''}
-                        onBlur={e => guardarDetalle(c, e.target.value)}
-                        className="w-36 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="comida, gasolina..."
-                      />
+                      <select
+                        className={`w-40 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          c.detalle ? 'border-gray-300 text-gray-700' : 'border-yellow-300 bg-yellow-50 text-yellow-700'
+                        }`}
+                        value={c.detalle ?? ''}
+                        onChange={e => guardarDetalle(c, e.target.value)}
+                      >
+                        <option value="">Sin categorizar</option>
+                        {NOMBRES_CATEGORIAS.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-3 py-2 text-center">
                       <button
