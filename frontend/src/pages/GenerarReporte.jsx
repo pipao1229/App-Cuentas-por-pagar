@@ -44,9 +44,16 @@ export default function GenerarReporte({ entidad }) {
   })
 
   const actualizarDetalle = useMutation({
-    mutationFn: ({ id, detalle }) => actualizarDetalleComprobante(id, detalle),
-    onSuccess: () => queryClient.invalidateQueries(['comprobantes', entidad]),
-    onError: () => setToast({ mensaje: 'Error al guardar el detalle.', tipo: 'error' })
+    mutationFn: ({ id, detalle }) => actualizarDetalleComprobante(id, detalle).then(r => r.data),
+    onSuccess: (comprobanteActualizado) => {
+      // Actualiza la caché al instante con el comprobante ya actualizado,
+      // sin esperar a que termine un refetch (evita el "no pasó nada" visual)
+      queryClient.setQueriesData(
+        { queryKey: ['comprobantes', entidad] },
+        (old) => old?.map(c => c.id === comprobanteActualizado.id ? comprobanteActualizado : c)
+      )
+    },
+    onError: () => setToast({ mensaje: 'Error al guardar la categoría.', tipo: 'error' })
   })
 
   function guardarDetalle(c, valor) {
