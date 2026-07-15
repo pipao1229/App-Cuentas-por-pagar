@@ -21,6 +21,7 @@ export default function GenerarReporte({ entidad }) {
   const [fechaHasta, setFechaHasta] = useState('')
   const [confirmEliminar, setConfirmEliminar] = useState(null)
   const [toast, setToast] = useState(null)
+  const [backfillProgreso, setBackfillProgreso] = useState({ activo: false, hecho: 0, total: 0 })
   const cerrarToast = useCallback(() => setToast(null), [])
 
   const { data: comprobantes = [], isLoading } = useQuery({
@@ -58,6 +59,70 @@ export default function GenerarReporte({ entidad }) {
   function guardarDetalle(c, valor) {
     if (valor === (c.detalle ?? '')) return
     actualizarDetalle.mutate({ id: c.id, detalle: valor })
+  }
+
+  // ── Completar detalle de comprobantes ya guardados ──────────────────────
+  // Relee el xml_original de cada comprobante (ya está en la base de datos)
+  // y extrae cada <LineaDetalle><Detalle>, igual que al cargar un XML nuevo.
+  function extraerDetalleDeXML(xmlTexto) {
+    if (!xmlTexto) return ''
+    try {
+      const doc = new DOMParser().parseFromString(xmlTexto, 'application/xml')
+      if (doc.getElementsByTagName('parsererror').length) return ''
+      return Array.from(doc.getElementsByTagNameNS('*', 'LineaDetalle'))
+        .map(linea => linea.getElementsByTagNameNS('*', 'Detalle')[0]?.textContent.trim() ?? '')
+        .filter(Boolean)
+        .join(' · ')
+    } catch {
+      return ''
+    }
+  }
+
+  async function completarDetallesFaltantes() {
+    setBackfillProgreso({ activo: true, hecho: 0, total: 0 })
+    try {
+      // Trae TODOS los comprobantes de esta entidad, sin importar el filtro
+      // de fechas que esté puesto en pantalla, para no dejar ninguno afuera.
+      const { data: todos } = await getComprobantes({ entidad })
+      const pendientes = todos.filter(c => c.xml_original && !(c.detalle && c.detalle.trim()))
+
+      if (pendientes.length === 0) {
+        setToast({ mensaje: 'No hay comprobantes pendientes de detalle.', tipo: 'exito' })
+        return
+      }
+
+      setBackfillProgreso({ activo: true, hecho: 0, total: pendientes.length })
+
+      let actualizados = 0, sinLineasEnXML = 0, errores = 0
+      const TAMANO_LOTE = 5
+
+      for (let i = 0; i < pendientes.length; i += TAMANO_LOTE) {
+        const lote = pendientes.slice(i, i + TAMANO_LOTE)
+        await Promise.all(lote.map(async (c) => {
+          const detalle = extraerDetalleDeXML(c.xml_original)
+          if (!detalle) { sinLineasEnXML++; return }
+          try {
+            await actualizarDetalleComprobante(c.id, detalle)
+            actualizados++
+          } catch {
+            errores++
+          }
+        }))
+        setBackfillProgreso({ activo: true, hecho: Math.min(i + TAMANO_LOTE, pendientes.length), total: pendientes.length })
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['comprobantes', entidad] })
+      setToast({
+        mensaje: `Detalle completado: ${actualizados} actualizados` +
+          (sinLineasEnXML ? `, ${sinLineasEnXML} sin líneas en el XML` : '') +
+          (errores ? `, ${errores} con error` : '') + '.',
+        tipo: errores ? 'error' : 'exito'
+      })
+    } catch {
+      setToast({ mensaje: 'Error al completar los detalles.', tipo: 'error' })
+    } finally {
+      setBackfillProgreso({ activo: false, hecho: 0, total: 0 })
+    }
   }
 
   // ── Totales generales ────────────────────────────────────────────────────
@@ -202,7 +267,17 @@ export default function GenerarReporte({ entidad }) {
             Limpiar fechas
           </button>
         )}
-        <div className="ml-auto self-end">
+        <div className="ml-auto self-end flex gap-2">
+          <button
+            onClick={completarDetallesFaltantes}
+            disabled={backfillProgreso.activo}
+            title="Relee el XML guardado de cada comprobante y llena el campo Detalle si está vacío"
+            className="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {backfillProgreso.activo
+              ? `Completando... ${backfillProgreso.hecho}/${backfillProgreso.total}`
+              : 'Completar detalles desde XML'}
+          </button>
           <button
             onClick={exportarExcel}
             disabled={!comprobantes.length}
