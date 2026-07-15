@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { crearComprobante } from '../api/comprobantes'
-import { categorizarComprobante, NOMBRES_CATEGORIAS } from '../utils/categorias'
 import Toast from '../components/Toast'
 
 // ── Códigos oficiales de CodigoTarifaIVA según XSD Hacienda v4.4 ───────────
@@ -130,13 +129,13 @@ function parsearXML(texto, nombreArchivo) {
   }
   const tasasIVA = tasasSet.size ? [...tasasSet].join(', ') : '—'
 
-  // ── Categoría sugerida automáticamente a partir del emisor y las líneas
-  // del XML. Si no hay coincidencia, queda en blanco para que el cliente
-  // la elija manualmente en el selector.
-  const detalleItems = getAll(doc, 'LineaDetalle')
+  // ── Detalle: se toma cada <LineaDetalle><Detalle> tal cual viene en el
+  // XML de Hacienda (descripción de cada mercancía/servicio de la factura).
+  // Queda editable para que el cliente lo revise y clasifique a su manera.
+  const detalleSugerido = getAll(doc, 'LineaDetalle')
     .map(linea => getText(linea, 'Detalle'))
     .filter(Boolean)
-  const detalleSugerido = categorizarComprobante(emisorNombre, detalleItems)
+    .join(' · ')
 
   return {
     tipo:            'factura',
@@ -321,7 +320,7 @@ export default function CargarXML({ entidad }) {
                   <th className="px-3 py-3 text-left">Tasa(s)</th>
                   <th className="px-3 py-3 text-right">IVA ₡</th>
                   <th className="px-3 py-3 text-right">Total ₡</th>
-                  <th className="px-3 py-3 text-left">Categoría</th>
+                  <th className="px-3 py-3 text-left">Detalle</th>
                   <th className="px-3 py-3 text-center">Quitar</th>
                 </tr>
               </thead>
@@ -370,18 +369,14 @@ export default function CargarXML({ entidad }) {
                       ₡{fmt(item.datos.total_crc)}
                     </td>
                     <td className="px-3 py-2">
-                      <select
-                        className={`w-40 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          item.datos.detalle ? 'border-gray-300 text-gray-700' : 'border-yellow-300 bg-yellow-50 text-yellow-700'
+                      <input
+                        className={`w-48 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          item.datos.detalle ? 'border-gray-300' : 'border-yellow-300 bg-yellow-50'
                         }`}
                         value={item.datos.detalle ?? ''}
                         onChange={e => actualizarDetallePreview(item.datos.clave, e.target.value)}
-                      >
-                        <option value="">Sin categorizar</option>
-                        {NOMBRES_CATEGORIAS.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
+                        placeholder="Sin detalle en el XML"
+                      />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <button onClick={() => quitarDePreview(item.datos.clave)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
