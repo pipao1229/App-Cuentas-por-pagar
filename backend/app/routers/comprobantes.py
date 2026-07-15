@@ -50,7 +50,11 @@ def actualizar_detalle(comprobante_id: str, datos: ComprobanteUpdateDetalle, db:
     if not c:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado.")
     c.detalle = datos.detalle
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="No se pudo guardar el detalle. Verifique el contenido.")
     db.refresh(c)
     return c
 
