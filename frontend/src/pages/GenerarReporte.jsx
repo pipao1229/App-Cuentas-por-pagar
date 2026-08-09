@@ -232,7 +232,8 @@ export default function GenerarReporte({ entidad }) {
     XLSX.utils.book_append_sheet(wb, wsDetalle, 'Comprobantes')
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen por tasa IVA')
 
-    const label = entidad === 'empresa' ? 'Empresa' : 'Ferreteria'
+    const LABELS_ENTIDAD = { empresa: 'Empresa', ferreteria: 'Ferreteria', daniel: 'Daniel' }
+    const label = LABELS_ENTIDAD[entidad] ?? entidad
     const desde = fechaDesde || 'inicio'
     const hasta = fechaHasta || 'hoy'
     XLSX.writeFile(wb, `reporte_${label}_${desde}_${hasta}.xlsx`)

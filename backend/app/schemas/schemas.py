@@ -83,7 +83,7 @@ class PagoUpdate(BaseModel):
 
 # ── Comprobantes ──────────────────────────────
 class ComprobanteCreate(BaseModel):
-    entidad:            Literal["empresa", "ferreteria"]
+    entidad:            Literal["empresa", "ferreteria", "daniel"]
     clave:              str
     numero_consecutivo: str
     emisor_nombre:      str

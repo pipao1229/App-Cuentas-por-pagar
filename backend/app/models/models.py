@@ -56,7 +56,7 @@ class Comprobante(Base):
     __tablename__ = "comprobantes"
 
     id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    entidad            = Column(String(20), nullable=False)          # 'empresa' | 'ferreteria'
+    entidad            = Column(String(20), nullable=False)          # 'empresa' | 'ferreteria' | 'daniel'
     clave              = Column(String(60), nullable=False, unique=True)
     numero_consecutivo = Column(String(30), nullable=False)
     emisor_nombre      = Column(String(200), nullable=False)

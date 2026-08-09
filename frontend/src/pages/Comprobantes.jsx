@@ -5,6 +5,7 @@ import GenerarReporte from './GenerarReporte'
 const ENTIDADES = [
   { key: 'empresa',    label: 'Empresa'    },
   { key: 'ferreteria', label: 'Ferretería' },
+  { key: 'daniel',     label: 'Daniel'     },
 ]
 
 const MODULOS = [
