@@ -15,7 +15,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex="https://.*\\.vercel\\.app|http://localhost:5173",
-    allow_credentials=True,          # cambia a True para que pasen los headers
+    allow_credentials=True,          
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -29,10 +29,9 @@ app.include_router(comprobantes.router, prefix="/api/comprobantes", tags=["Compr
 def root():
     return {"status": "ok", "mensaje": "API de Cuentas por Pagar funcionando"}
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health(db: Session = Depends(get_db)):
     # Consulta real a Postgres para mantener activo el proyecto de Supabase
-    # (sin verify_token: este endpoint lo llama un cron externo, no un usuario logueado)
     try:
         db.execute(text("SELECT 1"))
         return {"status": "ok", "db": "reachable"}
