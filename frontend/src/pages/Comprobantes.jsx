@@ -3,9 +3,10 @@ import CargarXML from './CargarXML'
 import GenerarReporte from './GenerarReporte'
 
 const ENTIDADES = [
-  { key: 'empresa',    label: 'Empresa'    },
+  { key: 'empresa',    label: 'Impacto Visual' },
   { key: 'ferreteria', label: 'Ferretería' },
   { key: 'daniel',     label: 'Daniel'     },
+  { key: 'ipl',        label: 'IPL'        },
 ]
 
 const MODULOS = [
