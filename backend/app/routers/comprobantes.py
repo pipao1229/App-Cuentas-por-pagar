@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
+from sqlalchemy import or_
 from app.database import get_db
 from app.models.models import Comprobante
-from app.schemas.schemas import ComprobanteCreate, ComprobanteOut, ComprobanteUpdateDetalle
+from app.schemas.schemas import ComprobanteCreate, ComprobanteOut, ComprobanteListOut, ComprobanteUpdateDetalle
 from typing import List, Optional
 from datetime import date
 
@@ -29,14 +30,16 @@ def crear_comprobante(datos: ComprobanteCreate, db: Session = Depends(get_db)):
     return nuevo
 
 
-@router.get("/", response_model=List[ComprobanteOut])
+@router.get("/", response_model=List[ComprobanteListOut])  
 def listar_comprobantes(
     entidad:      str            = Query(...),
     fecha_desde:  Optional[date] = Query(None),
     fecha_hasta:  Optional[date] = Query(None),
     db: Session = Depends(get_db)
 ):
-    q = db.query(Comprobante).filter(Comprobante.entidad == entidad)
+    q = (db.query(Comprobante)
+            .options(defer(Comprobante.xml_original))         
+            .filter(Comprobante.entidad == entidad))
     if fecha_desde:
         q = q.filter(Comprobante.fecha_emision >= fecha_desde)
     if fecha_hasta:

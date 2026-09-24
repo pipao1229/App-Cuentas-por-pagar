@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.routers import proveedores, facturas, pagos, comprobantes
 from app.auth import verify_token
 from app.database import get_db
+from fastapi.middleware.gzip import GZipMiddleware
 
 app = FastAPI(
     title="Cuentas por Pagar API",
@@ -20,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(proveedores.router,  prefix="/api/proveedores",  tags=["Proveedores"],  dependencies=[Depends(verify_token)])
 app.include_router(facturas.router,     prefix="/api/facturas",     tags=["Facturas"],     dependencies=[Depends(verify_token)])
 app.include_router(pagos.router,        prefix="/api/pagos",        tags=["Pagos"],        dependencies=[Depends(verify_token)])

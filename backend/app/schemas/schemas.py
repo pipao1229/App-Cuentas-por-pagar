@@ -112,5 +112,32 @@ class ComprobanteOut(ComprobanteCreate):
     class Config:
         from_attributes = True
 
+class ComprobanteListOut(BaseModel):
+    id:                 UUID
+    entidad:            str
+    clave:              str
+    numero_consecutivo: str
+    emisor_nombre:      str
+    emisor_cedula:      str
+    fecha_emision:      date
+    moneda_original:    str
+    tipo_cambio:        float
+    subtotal_crc:       float
+    descuentos_crc:     float
+    impuesto_crc:       float
+    total_crc:          float
+    gravado_crc:        float
+    exento_crc:         float
+    exonerado_crc:      float
+    no_sujeto_crc:      float
+    tasas_iva:          str
+    tipo_comprobante:   str
+    desglose_iva:       List[Any]
+    detalle:            Optional[str] = None
+    created_at:         datetime
+
+    class Config:
+        from_attributes = True
+
 class ComprobanteUpdateDetalle(BaseModel):
     detalle: Optional[str] = None

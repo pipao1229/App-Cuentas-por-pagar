@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getComprobantes, eliminarComprobante, actualizarDetalleComprobante } from '../api/comprobantes'
+import { getComprobantes, eliminarComprobante, actualizarDetalleComprobante, getComprobantesSinDetalle } from '../api/comprobantes'
 import { formatFecha } from '../utils/fecha'
 import * as XLSX from 'xlsx'
 import Toast from '../components/Toast'
@@ -83,9 +83,7 @@ export default function GenerarReporte({ entidad }) {
     try {
       // Trae TODOS los comprobantes de esta entidad, sin importar el filtro
       // de fechas que esté puesto en pantalla, para no dejar ninguno afuera.
-      const { data: todos } = await getComprobantes({ entidad })
-      const pendientes = todos.filter(c => c.xml_original && !(c.detalle && c.detalle.trim()))
-
+      const { data: pendientes } = await getComprobantesSinDetalle(entidad)
       if (pendientes.length === 0) {
         setToast({ mensaje: 'No hay comprobantes pendientes de detalle.', tipo: 'exito' })
         return
