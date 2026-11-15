@@ -7,6 +7,7 @@ const ENTIDADES = [
   { key: 'ferreteria', label: 'Ferretería' },
   { key: 'daniel',     label: 'Daniel'     },
   { key: 'ipl',        label: 'IPL'        },
+  { key: 'hispanoalemana', label: 'Hispanoalemana' },
 ]
 
 const MODULOS = [
